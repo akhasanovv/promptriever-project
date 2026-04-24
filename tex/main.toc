@@ -1,0 +1,18 @@
+\babel@toc {russian}{}\relax 
+\contentsline {section}{Аннотация}{ii}{}%
+\contentsline {section}{\numberline {1}Введение}{1}{}%
+\contentsline {subsection}{\numberline {1.1}Актуальность}{1}{}%
+\contentsline {subsection}{\numberline {1.2}Цели}{1}{}%
+\contentsline {subsection}{\numberline {1.3}Задачи проекта}{1}{}%
+\contentsline {section}{\numberline {2}Обзор и анализ источников}{2}{}%
+\contentsline {subsection}{\numberline {2.1}Promptriever}{2}{}%
+\contentsline {subsection}{\numberline {2.2}InstructOR}{2}{}%
+\contentsline {subsection}{\numberline {2.3}Multilingual-E5}{3}{}%
+\contentsline {subsection}{\numberline {2.4}BGE-M3}{3}{}%
+\contentsline {subsection}{\numberline {2.5}SberQuAD}{3}{}%
+\contentsline {subsection}{\numberline {2.6}mFollowIR}{4}{}%
+\contentsline {subsection}{\numberline {2.7}ruMTEB}{4}{}%
+\contentsline {section}{\numberline {3}Основная часть}{4}{}%
+\contentsline {subsection}{\numberline {3.1}Первые эксперименты}{4}{}%
+\contentsline {subsection}{\numberline {3.2}Сбор датасета}{4}{}%
+\contentsline {section}{Список использованных источников}{6}{}%

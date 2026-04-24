@@ -1,0 +1,8 @@
+name: bge-m3
+hf_id: BAAI/bge-m3
+family: bge
+query_prefix: ""
+document_prefix: ""
+query_template: "{instruction}\n{query}"
+document_template: "{passage}"
+normalize_embeddings: true

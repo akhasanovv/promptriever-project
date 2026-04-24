@@ -1,0 +1,9 @@
+base_records_path: data/interim/sberquad_base/sberquad_records.jsonl
+negative_instructions_path: data/interim/sberquad_base/negative_instructions.jsonl
+output_path: data/processed/sberquad_instruction_pairs.jsonl
+positive_instruction_template: "Найди документ, который точно отвечает на вопрос пользователя."
+include_answer_in_metadata: true
+splits:
+  - train
+  - validation
+  - test

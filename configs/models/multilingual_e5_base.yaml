@@ -1,0 +1,8 @@
+name: multilingual-e5-base
+hf_id: intfloat/multilingual-e5-base
+family: e5
+query_prefix: "query: "
+document_prefix: "passage: "
+query_template: "{instruction}\n{query}"
+document_template: "{passage}"
+normalize_embeddings: true

@@ -1,0 +1,9 @@
+dataset_name: kuznetsoffandrey/sberquad
+dataset_splits:
+  train: train
+  validation: validation
+  test: test
+output_dir: data/interim/sberquad_base
+deduplicate_contexts: false
+min_context_chars: 50
+max_samples_per_split: null

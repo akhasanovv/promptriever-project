@@ -1,0 +1,262 @@
+\documentclass[12pt, a4paper, oneside]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T2A]{fontenc}
+\usepackage[russian]{babel}
+
+\usepackage[left=1.5cm, right=1.5cm, top=2cm, bottom=2cm]{geometry}
+
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{url}
+\usepackage{indentfirst}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{float}
+
+\onehalfspacing
+
+\usepackage{caption}
+\captionsetup[figure]{font=small, labelfont=bf}
+\captionsetup[table]{font=small, labelfont=bf}
+
+\usepackage[backend=biber,style=numeric]{biblatex}
+\addbibresource{bibliography.bib}
+
+\newcommand{\MyUniversity}{Национальный исследовательский университет \\ "Высшая школа экономики"}
+\newcommand{\MyProjectText}{Исследовательский проект}
+\newcommand{\MyTopicText}{Обучение ретривера на инструкциях}
+\newcommand{\MyTopicTextEn}{Promptriever: Instruction-Trained Retrievers}
+\newcommand{\MyStudentGroup}{БПМИ242}
+\newcommand{\MyStudentName}{Хасанов Айдар Рифкатович}
+\newcommand{\MySupervisorName}{Андреева Дарья Александровна}
+\newcommand{\MyCityYear}{Москва, 2026}
+
+\newcommand{\maketitlepage}{
+    \thispagestyle{empty}
+    \begin{center}
+        \vspace*{\fill}
+        
+        \vspace{0.5em}
+        {\Large \MyUniversity\\}
+        \vspace{4cm}
+        {\Large \textbf{\MyProjectText}\\}
+        {\large \MyTopicText\\}
+        {\large \MyTopicTextEn\\}
+        \vspace{2cm}
+        
+        \begin{minipage}{0.9\textwidth}
+            \flushright
+            \large
+            \textbf{Выполнил:}\\
+            Студент группы \MyStudentGroup\\
+            \MyStudentName
+        \end{minipage}
+        
+        \vspace{3em}
+
+        \begin{minipage}{0.9\textwidth}
+            \flushright 
+            \large
+            \textbf{Научный руководитель:}\\
+            \MySupervisorName
+        \end{minipage}
+        
+        \vspace{4cm}
+        {\large \MyCityYear}
+        \vspace*{\fill}
+    \end{center}
+    \newpage
+}
+
+\begin{document}
+
+\maketitlepage
+
+\pagenumbering{roman}
+
+\tableofcontents
+\newpage
+
+\section*{Аннотация}
+
+\addcontentsline{toc}{section}{Аннотация} 
+
+Данная работа посвящена реализации подхода Promptriever для русского языка путем дообучения нескольких моделей на модифицированном датасете SberQuAD. Целью исследования является создание поисковой системы, способной эффективно следовать текстовым инструкциям пользователя для повышения точности и управляемости поиска. Эффективность метода оценивается на бенчмарках ruMTEB и mFollowIR с использованием метрик nDCG@10 и pMRR.
+
+\newpage
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\section{Введение}
+\label{sec:vvedenie}
+Поиск информации прошел путь от простого сопоставления ключевых слов до использования семантических векторов, создаваемых нейронными сетями. Современные би-энкодеры позволяют находить документы по смыслу, переводя запросы и документы в единое векторное пространство $\mathbb{R}^d$. Однако традиционные модели поиска ограничены: они не способны учитывать специфические инструкции пользователя, воспринимая их как часть поискового запроса.
+
+Данная работа посвящена реализации подхода, использованного в статье Promptriever \cite{weller2024promptriever} для русского языка. Основная идея заключается в обучении модели воспринимать текстовые инструкции. 
+
+\subsection{Актуальность}
+
+Дообучение ретривера, способного понимать инструкции на русском языке, позволит:
+
+\begin{enumerate}
+    \item Повысить точность поиска в специализированных задачах.
+
+    \item Обеспечить управляемость систем поиска за счет инструкций. 
+\end{enumerate}
+
+\subsection{Цели}
+
+\begin{enumerate}
+    \item Изучение и реализация модели Promptriever, которая умеет работать с инструкциями на естественном языке при выполнении поиска документов. 
+    
+    \item Оценка эффективности модели в различных условиях. 
+
+    \item Сравнение различных моделей в качестве baseline при реализации ретривера. 
+\end{enumerate}
+
+\subsection{Задачи проекта}
+
+\begin{enumerate}
+    \item Изучение архитектуры, предложенной в статье Promptriever.
+    
+    \item Подготовка обучающего датасета на основе SberQuAD \cite{sberquad}  с генерацией позитивных и негативных инструкций для обучения модели следованию командам.
+    
+    \item Дообучение модели multilingual-e5-base \cite{wang2024multilingual}.
+    
+    \item Оценка качества базового поиска на бенчмарках ruMTEB \cite{snegirev2025russianfocusedembeddersexplorationrumteb} (RuBQ, RiaNews, MIRACL) по метрике nDCG@10.
+    
+    \item Оценка способности модели следовать инструкциям на retrieval-бенчмарке mFollowIR \cite{weller2025mfollowirmultilingualbenchmarkinstruction} с использованием метрики pMRR.
+
+    \item Сравнение разных моделей в качестве baseline.
+\end{enumerate}
+
+\section{Обзор и анализ источников}
+\label{sec:links}
+
+В основу исследования легли следующие работы:
+
+\subsection{Promptriever}
+
+Promptriever: Instruction-Trained Retrievers Can Be Prompted Like Language Models \cite{weller2024promptriever} --- статья, вводящая концепцию обучения ретриверов на инструкциях и демонстрирующая их эффективность в zero-shot задачах. В отличие от обычных би-энкодеров, которые опираются на семантическую близость векторов, Promptriever обучается учитывать условия из промпта.
+Основные преимущества:
+
+\begin{enumerate}
+    \item Promptriever обучается на данных без фиксированной структуры запросов, что позволяет использовать его в zero-shot режиме на данных различной сложности.
+    
+    \item Использование негативных примеров (где документ подходит по теме, но нарушает условие инструкции) существенно повышает pMRR (прирост в $+14.3$ по сравнению с RepLLaMA). 
+    
+    \item Promptriever можно масштабировать. Авторы демонстрируют, что качество следования инструкциям коррелирует с размером базовой модели и объемом синтетических данных, сгенерированных с помощью LLM для обучения.
+\end{enumerate}
+
+\subsection{InstructOR}
+
+One Embedder, Any Task: Instruction-Finetuned Text Embeddings \cite{su2023embeddertaskinstructionfinetunedtext} --- статья, в которой также используется идея перевода запросов и инструкций в эмбеддинг. Среди преимуществ Promptriever относительно InstructOR можно выделить:
+
+\begin{enumerate}
+    \item Умение обрабатывать более сложные инструкции. InstructOR обучался на фиксированных инструкциях формата \texttt{represent the \{domain\} for \{task type\} supporting documents; input: \{input\}}, в то время как Promptriever может воспринимать любые инструкции. 
+
+    \item Использует негативные инструкции к запросам при дообучении. Это дает значительный прирост в pMRR, так как модель учится распознавать важные слова в условиях. 
+
+    \item В целом у Promptriever гораздо лучше качество поиска и следование инструкциям. Средний pMRR на FollowIR датасете составляет $+11.2$ вместо $-2.8$ у Instructor XL. На MS-MARCO метрика nDCG у Promptriever также сильно выше: $92.1$ против $48.6$ \cite{weller2024promptriever}.
+\end{enumerate}
+
+В свою очередь, у Promptriever есть и недостатки относительно подхода InstructOR. 
+
+\begin{enumerate}
+    \item Метод, предложенный в InstructOR, отлично обобщается для большего числа задач: от классификации и retrieval до оценки генерации текста. 
+
+    \item Зависимость от качества генерации инструкций LLM. В InstructOR инструкции были собраны вручную, а не синтетически, что часто дает преимущество.  
+\end{enumerate}
+
+\subsection{Multilingual-E5}
+
+Multilingual E5 Text Embeddings \cite{wang2024multilingual} --- технический отчет по базовой модели данного исследования (multilingual-e5-base), описывающий архитектуру и обучение на мультиязычных парах текстов. 
+Особенности модели:
+
+\begin{enumerate}
+    \item Сначала модель проходит контрастивное предобучение на $10^9$ парах вида текст-текст из открытых источников, а затем дообучается на $1.6 \cdot 10^6$ текстах и $5 \cdot 10^5$ инструкциях, сгенерированных GPT-3.5/4.
+
+    \item E5 был обучен на данных формата \texttt{query: \{query\}, passage: \{passage\}}. Это нужно будет учитывать при дообучении и тестировании. 
+
+    \item Модель поддерживает 93 языка.  
+
+    \item Количество параметров модели --- $278$M. 
+
+\end{enumerate}
+
+\subsection{BGE-M3}
+
+M3-Embedding: Multi-Linguality, Multi-Functionality, Multi-Granularity Text Embeddings Through Self-Knowledge Distillation \cite{chen2025m3embeddingmultilingualitymultifunctionalitymultigranularity} --- многофункциональная мультиязычная модель нового поколения. Модель M3 мультиязычная и поддерживает более 100 языков, включая русский. Некоторые особенности модели:
+
+\begin{enumerate}
+    \item Кроме обычного режима (dense retrieval), в котором мы сравниваем векторы по косинусной близости, доступны еще 2: multi-vector retrieval и sparse retrieval. 
+    
+    \item BGE-M3, в отличие от M-E5, не требует дополнительного формартирования данных вида \texttt{query: \{query\}}.
+    
+    \item Имеет большое контекстное окно. Поддержка до 8192 токенов позволяет использовать BGE-M3 для поиска по длинным документам без разбиения на куски. 
+
+    \item Количество параметров модели -- $569$M.
+\end{enumerate}
+
+\subsection{SberQuAD}
+
+SberQuAD: Russian Reading Comprehension Dataset: Description and Analysis \cite{sberquad} --- русскоязычный аналог датасета SQuAD. Представляет из себя описание и анализ первого крупного датасета для задачи смыслового чтения на русском языке, который используется в данной работе как база для обучения. Датасет содержит более $5 \cdot 10^4$ троек (контекст, вопрос, ответ), собранных с помощью краудсорсинга на базе статей Википедии.
+
+\subsection{mFollowIR}
+
+mFollowIR: a Multilingual Benchmark for Instruction Following in Retrieval \cite{weller2025mfollowirmultilingualbenchmarkinstruction} --- современный бенчмарк для оценки способности ретриверов следовать инструкциям на разных языках, включая русский.
+Он включает в себя:
+
+\begin{enumerate}
+    \item Запросы с дополнительными условиями. Например, поиск информации с ограничением по временному интервалу, стилистике или специфическому подмножеству сущностей.
+    
+    \item Метрику pMRR. Данная метрика штрафует модель, если в топ выдачи попадает документ, релевантный теме, но нарушающий инструкцию. Если модель выдает высокий nDCG, но низкий pMRR, то она не следует инструкциям. 
+\end{enumerate}
+
+\subsection{ruMTEB}
+
+The Russian-focused embedders' exploration: ruMTEB benchmark and Russian embedding model design \cite{snegirev2025russianfocusedembeddersexplorationrumteb} --- работа, представляющая русскоязычное расширение глобального бенчмарка MTEB. Авторы объединили 23 датасета, разделенных на 7 категорий задач (классификация, кластеризация, поиск и др.). Для retrieval задач бенчмарк предлагает проверку на таких наборах данных, как RuBQ, RiaNews и русскоязычную версию MIRACL. 
+
+\section{Основная часть}
+\label{sec:main}
+
+\subsection{Первые эксперименты}
+
+На начальном этапе работы была проведена оценка моделей multilingual-e5-base и bge-m3 без дообучения на инструкциях. Тестирование проводилось на датасете RuBQRetrieval (часть бенчмарка ruMTEB) и mFollowIR.
+
+\begin{table}[H]
+    \centering
+    \caption{Результаты тестирования без дообучения}
+    \label{tab:instruction_results}
+    \begin{tabular}{lccc}
+        \toprule
+        \textbf{Модель} & \textbf{RuBQRetrieval (nDCG@10)} & \textbf{mFollowIR (pMRR)} \\
+        \midrule
+        multilingual-e5-base\textsuperscript{1} & $0.69170$ & $-0.02994$ \\
+        bge-m3 & $0.71178$ & $-0.02154$ \\
+        \bottomrule
+    \end{tabular}
+    \vspace{0.2cm}
+\end{table}
+
+Как видно из таблицы, без дообучения модели показывают неплохие результаты по метрике nDCG, но достаточно слабые результаты по метрике pMRR. Дальнейшие эксперименты будут направлены на обучение модели таким образом, чтобы при сохранении высокого качества поиска она демонстрировала значительный прирост по метрике pMRR. 
+
+\subsection{Сбор датасета}
+
+За основу датасета для дообучения на инструктивных негативах берется 
+SberQuAD. Для каждого примера (контекст, вопрос, ответ) генерируются позитивные и негативные инструкции. 
+Позитивные инструкции формулируются так, чтобы модель должна была выдавать релевантные документы, 
+а негативные инструкции содержат условия, которые нарушают релевантность. 
+
+\footnotetext[1]{При тестировании использовался формат \texttt{query: \{запрос\}} и \texttt{passage: \{текст\}}}
+
+\newpage
+
+\printbibliography[heading=bibintoc, title={Список использованных источников}]
+
+\end{document}

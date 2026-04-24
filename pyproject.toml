@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "promptriever-rs"
+version = "0.1.0"
+description = "Research scaffold for Russian Promptriever-style retriever training on SberQuAD."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Aidar Khasanov" }
+]
+dependencies = [
+  "PyYAML>=6.0",
+  "pandas>=2.2",
+  "datasets>=2.18",
+  "httpx>=0.27",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+train = [
+  "torch>=2.2",
+  "sentence-transformers>=5.4.1",
+  "transformers>=4.41,<6.0",
+  "accelerate>=1.5.0",
+]
+eval = [
+  "mteb>=1.20",
+  "sentence-transformers>=5.4.1",
+  "transformers>=4.41,<6.0",
+]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+promptriever-rs = "promptriever_rs.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

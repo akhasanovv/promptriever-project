@@ -1,0 +1,11 @@
+run_name: e5_rumteb_eval
+model_config: configs/models/multilingual_e5_base.yaml
+model_path: intfloat/multilingual-e5-base
+tasks:
+  - RuBQRetrieval
+  - RiaNewsRetrieval
+  - MIRACLRetrieval
+languages:
+  - rus
+output_path: outputs/eval/rumteb_russian/results.json
+batch_size: 64
