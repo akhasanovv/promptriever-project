@@ -1,7 +1,7 @@
 run_name: e5_rumteb_eval
 model_config: configs/models/multilingual_e5_base.yaml
 model_path: intfloat/multilingual-e5-base
-device: mps
+device: auto
 tasks:
   - RuBQRetrieval
   - RiaNewsRetrieval

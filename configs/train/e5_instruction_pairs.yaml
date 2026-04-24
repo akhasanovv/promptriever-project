@@ -9,7 +9,7 @@ eval_splits:
   - validation
 training_mode: binary_instruction_pairs
 loss: cosine_similarity
-device: mps
+device: auto
 batch_size: 32
 eval_batch_size: 64
 num_epochs: 1
