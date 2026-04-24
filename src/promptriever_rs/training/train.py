@@ -151,6 +151,7 @@ def fit(config_path: str | Path) -> Path:
             print(f"Validation will run every {evaluation_steps} training steps with a visible progress bar.")
         else:
             print("Validation will run at the end of each epoch with a visible progress bar.")
+        print("Validation uses the current in-memory model state from the training loop.")
     else:
         print("Validation evaluator is disabled for this training mode.")
 

@@ -10,3 +10,4 @@ languages:
   - rus
 output_path: outputs/eval/rumteb_russian/results.json
 batch_size: 64
+evaluation_steps: 10

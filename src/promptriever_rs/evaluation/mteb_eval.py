@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from tqdm.auto import tqdm
+
 from promptriever_rs.config import ensure_dir, load_yaml
 from promptriever_rs.models.registry import load_model_spec
 from promptriever_rs.utils.device import resolve_device
@@ -35,21 +37,37 @@ def evaluate_mteb(config_path: str | Path) -> Path:
         },
     )
 
-    tasks = mteb.get_tasks(tasks=config["tasks"], languages=config.get("languages"))
-    results = mteb.evaluate(
-        model,
-        tasks,
-        encode_kwargs={"batch_size": int(config.get("batch_size", 64))},
-    )
+    tasks = list(mteb.get_tasks(tasks=config["tasks"], languages=config.get("languages")))
+    task_results: list[dict] = []
+
+    for task in tqdm(tasks, desc="Evaluating tasks", total=len(tasks)):
+        task_name = getattr(task.metadata, "name", None) or getattr(task, "name", str(task))
+        print(f"Running evaluation for task: {task_name}")
+        result = mteb.evaluate(
+            model,
+            [task],
+            encode_kwargs={"batch_size": int(config.get("batch_size", 64))},
+            show_progress_bar=True,
+        )
+        if hasattr(result, "to_dict"):
+            task_results.append(result.to_dict())
+        elif hasattr(result, "to_dataframe"):
+            task_results.append(
+                {
+                    "task_name": task_name,
+                    "rows": result.to_dataframe().to_dict(orient="records"),
+                }
+            )
+        else:
+            task_results.append({"task_name": task_name, "results": str(result)})
 
     output_path = Path(config["output_path"])
     ensure_dir(output_path.parent)
-    if hasattr(results, "to_dict"):
-        payload = results.to_dict()
-    elif hasattr(results, "to_dataframe"):
-        payload = results.to_dataframe().to_dict(orient="records")
-    else:
-        payload = {"results": str(results)}
+    payload = {
+        "model_path": config["model_path"],
+        "device": device,
+        "tasks": task_results,
+    }
     with output_path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
     return output_path

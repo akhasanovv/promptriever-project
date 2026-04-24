@@ -36,7 +36,7 @@ def _call_groq(
     max_tokens: int,
 ) -> dict:
     client = Groq(
-        api_key=os.environ.get("GROQ_API_KEY"),
+        api_key=api_key
     )
 
     chat_completion = client.chat.completions.create(
@@ -47,7 +47,7 @@ def _call_groq(
         temperature=temperature,
         max_tokens=max_tokens,
         response_format={"type": "json_object"},
-        model="llama-3.1-8b-instant",
+        model=model,
     )
 
     content = chat_completion.choices[0].message.content
