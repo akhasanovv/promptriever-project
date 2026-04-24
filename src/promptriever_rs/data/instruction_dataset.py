@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tqdm.auto import tqdm
+
 from promptriever_rs.config import load_yaml
 from promptriever_rs.utils.io import read_jsonl, write_jsonl
 
@@ -17,7 +19,7 @@ def assemble_instruction_dataset(config_path: str | Path) -> Path:
     include_answer = bool(config.get("include_answer_in_metadata", True))
 
     assembled: list[dict] = []
-    for row in base_records:
+    for row in tqdm(base_records, desc="Assembling instruction dataset", total=len(base_records)):
         if row["split"] not in allowed_splits:
             continue
 

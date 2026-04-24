@@ -84,6 +84,20 @@ promptriever-rs train fit \
 Для Apple Silicon используйте `device: mps`. Для NVIDIA GPU — `device: cuda`.
 Параметр `use_fp16: true` имеет смысл только на `cuda`; на `mps` и `cpu` он автоматически отключается.
 
+Во всех основных этапах добавлены progress bars:
+
+- сборка `SberQuAD`-артефактов,
+- генерация негативных инструкций,
+- сборка финального instruction dataset,
+- преобразование записей в train/eval пары,
+- обучение,
+- валидация во время `fit`.
+
+В train-конфиге параметр `evaluation_steps` управляет частотой валидации:
+
+- `evaluation_steps: 0` — валидация в конце эпохи,
+- `evaluation_steps: 100` — валидация каждые 100 train steps.
+
 5. Прогнать оценку:
 
 ```bash

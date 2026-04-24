@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from datasets import load_dataset
+from tqdm.auto import tqdm
 
 from promptriever_rs.config import ensure_dir, load_yaml
 from promptriever_rs.utils.io import write_jsonl
@@ -21,8 +22,9 @@ def iter_sberquad_records(config: dict) -> Iterable[dict]:
     for split_alias, hf_split in split_mapping.items():
         dataset = load_dataset(dataset_name, split=hf_split)
         processed = 0
+        total = len(dataset) if hasattr(dataset, "__len__") else None
 
-        for index, row in enumerate(dataset):
+        for index, row in enumerate(tqdm(dataset, desc=f"Building SberQuAD split={split_alias}", total=total)):
             context = str(row["context"]).strip()
             query = str(row["question"]).strip()
             answer = str(row["answers"]["text"][0]).strip() if row.get("answers", {}).get("text") else ""

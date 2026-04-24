@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 import httpx
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from groq import Groq
 
@@ -74,7 +74,9 @@ def generate_negative_instructions(config_path: str | Path) -> Path:
 
     delay = 60.0 / max(int(config.get("requests_per_minute", 25)), 1)
 
-    for record in tqdm(records, desc="Generating negatives"):
+    remaining_records = [record for record in records if record["sample_id"] not in existing_ids]
+
+    for record in tqdm(remaining_records, desc="Generating negatives", total=len(remaining_records)):
         if record["sample_id"] in existing_ids:
             continue
 
