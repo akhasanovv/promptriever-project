@@ -5,26 +5,30 @@ from pathlib import Path
 
 from promptriever_rs.config import ensure_dir, load_yaml
 from promptriever_rs.models.registry import load_model_spec
+from promptriever_rs.utils.device import resolve_device
 
 
 def _require_eval_stack():
     try:
+        import torch
         import mteb
         from sentence_transformers import SentenceTransformer
     except ImportError as exc:
         raise ImportError(
             "Evaluation dependencies are missing. Install with `pip install -e .[eval]`."
         ) from exc
-    return mteb, SentenceTransformer
+    return torch, mteb, SentenceTransformer
 
 
 def evaluate_mteb(config_path: str | Path) -> Path:
     config = load_yaml(config_path)
     model_spec = load_model_spec(config["model_config"])
-    mteb, SentenceTransformer = _require_eval_stack()
+    torch, mteb, SentenceTransformer = _require_eval_stack()
+    device = resolve_device(torch, config.get("device", "auto"))
 
     model = SentenceTransformer(
         config["model_path"],
+        device=device,
         prompts={
             "query": model_spec.query_prefix.strip(),
             "document": model_spec.document_prefix.strip(),

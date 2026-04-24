@@ -11,6 +11,7 @@ from promptriever_rs.training.dataset_adapters import (
     build_binary_instruction_pairs,
     build_mnrl_pairs,
 )
+from promptriever_rs.utils.device import resolve_device
 from promptriever_rs.utils.io import read_jsonl
 
 
@@ -70,7 +71,8 @@ def fit(config_path: str | Path) -> Path:
     _patch_accelerate_unwrap_model_if_needed(Accelerator)
     torch.manual_seed(seed)
 
-    model = SentenceTransformer(model_spec.hf_id)
+    device = resolve_device(torch, config.get("device", "auto"))
+    model = SentenceTransformer(model_spec.hf_id, device=device)
 
     mode = config.get("training_mode", "binary_instruction_pairs")
     if mode == "binary_instruction_pairs":
@@ -94,6 +96,11 @@ def fit(config_path: str | Path) -> Path:
         int(len(train_dataloader) * float(config.get("num_epochs", 1)) * float(config.get("warmup_ratio", 0.1))),
     )
 
+    use_fp16 = bool(config.get("use_fp16", False))
+    if device != "cuda" and use_fp16:
+        print(f"Disabling fp16 because device='{device}' does not support the CUDA fp16 training path.")
+        use_fp16 = False
+
     model.fit(
         train_objectives=[(train_dataloader, loss)],
         epochs=int(config.get("num_epochs", 1)),
@@ -101,7 +108,7 @@ def fit(config_path: str | Path) -> Path:
         output_path=str(output_dir / "model"),
         optimizer_params={"lr": float(config.get("learning_rate", 1e-4))},
         save_best_model=False,
-        use_amp=bool(config.get("use_fp16", False)),
+        use_amp=use_fp16,
         checkpoint_path=str(output_dir / "checkpoints"),
         checkpoint_save_steps=int(config.get("save_every_steps", 500)),
         show_progress_bar=True,
@@ -112,6 +119,7 @@ def fit(config_path: str | Path) -> Path:
         "run_name": config["run_name"],
         "model_name": model_spec.name,
         "hf_id": model_spec.hf_id,
+        "device": device,
         "training_mode": mode,
         "train_samples": len(train_dataset),
         "eval_samples": len(eval_dataset),

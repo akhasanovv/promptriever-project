@@ -74,6 +74,16 @@ promptriever-rs train fit \
   --config configs/train/e5_instruction_pairs.yaml
 ```
 
+В train/eval конфигах поддерживается выбор устройства:
+
+- `device: auto` — сначала `cuda`, потом `mps`, иначе `cpu`
+- `device: cuda`
+- `device: mps`
+- `device: cpu`
+
+Для Apple Silicon используйте `device: mps`. Для NVIDIA GPU — `device: cuda`.
+Параметр `use_fp16: true` имеет смысл только на `cuda`; на `mps` и `cpu` он автоматически отключается.
+
 5. Прогнать оценку:
 
 ```bash
