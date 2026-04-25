@@ -42,6 +42,14 @@ promptriever-rs generation generate-negatives \
   --config configs/dataset/sberquad_negative_generation.yaml
 ```
 
+Для OpenRouter есть отдельный конфиг-заглушка с `openai/gpt-oss-20b`:
+
+```bash
+export OPENROUTER_API_KEY=...
+promptriever-rs generation generate-negatives \
+  --config configs/dataset/sberquad_negative_generation_openrouter.yaml
+```
+
 Чтобы возобновить генерацию с произвольного места, выставьте в конфиге:
 
 ```yaml

@@ -1,13 +1,13 @@
 input_path: data/interim/sberquad_base/sberquad_records.jsonl
-output_path: data/interim/sberquad_base/negative_instructions.jsonl
-provider: groq
-model: llama-3.1-8b-instant
-api_base: https://api.groq.com/openai/v1
+output_path: data/interim/sberquad_base/negative_instructions_openrouter.jsonl
+provider: openrouter
+model: openai/gpt-oss-20b
+api_base: https://openrouter.ai/api/v1
 temperature: 0.2
 max_tokens: 220
 requests_per_minute: 25
 resume: true
-start_index: 3000
+start_index: 0
 system_prompt: |
   Ты помогаешь строить обучающий датасет для instruction-following retrieval.
   По паре вопрос-контекст нужно придумать ОДНУ негативную инструкцию на русском языке.

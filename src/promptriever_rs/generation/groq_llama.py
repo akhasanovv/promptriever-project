@@ -5,6 +5,7 @@ import os
 import time
 from pathlib import Path
 
+import httpx
 from tqdm.auto import tqdm
 
 from promptriever_rs.config import load_yaml
@@ -71,15 +72,99 @@ def _call_groq(
     return parsed
 
 
+def _call_openrouter(
+    *,
+    api_key: str,
+    api_base: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> dict:
+    try:
+        from openrouter import OpenRouter
+    except ImportError as exc:
+        raise ImportError(
+            "openrouter is required for instruction generation. Install it in your environment first."
+        ) from exc
+        
+    client = OpenRouter(api_key=api_key)
+
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=temperature,
+        max_tokens=max_tokens,
+        response_format={"type": "json_object"},
+        model=model,
+    )
+
+    content = chat_completion.choices[0].message.content
+    parsed = json.loads(content)
+    
+    if "negative_instruction" not in parsed:
+        raise ValueError("Groq response does not contain 'negative_instruction'.")
+    return parsed
+
+
+
+def _call_llm(
+    *,
+    provider: str,
+    api_key: str,
+    api_base: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> dict:
+    provider_name = provider.strip().lower()
+    if provider_name == "groq":
+        return _call_groq(
+            api_key=api_key,
+            api_base=api_base,
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    if provider_name == "openrouter":
+        return _call_openrouter(
+            api_key=api_key,
+            api_base=api_base,
+            model=model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+    raise ValueError(
+        f"Unsupported provider '{provider}'. Expected one of: groq, openrouter."
+    )
+
+
 def _prepare_generation_run(config_path: str | Path) -> tuple[dict, list[dict], set[str], int]:
     config = load_yaml(config_path)
     input_path = Path(config["input_path"])
     records = read_jsonl(input_path)
     start_index = int(config.get("start_index", 0))
-
-    api_key = os.getenv("GROQ_API_KEY")
+    provider = str(config.get("provider", "groq")).strip().lower()
+    env_var_name = {
+        "groq": "GROQ_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
+    }.get(provider)
+    if not env_var_name:
+        raise ValueError(
+            f"Unsupported provider '{provider}'. Expected one of: groq, openrouter."
+        )
+    api_key = os.getenv(env_var_name)
     if not api_key:
-        raise EnvironmentError("GROQ_API_KEY is not set.")
+        raise EnvironmentError(f"{env_var_name} is not set.")
 
     if start_index < 0:
         raise ValueError("start_index must be non-negative.")
@@ -97,6 +182,7 @@ def _prepare_generation_run(config_path: str | Path) -> tuple[dict, list[dict], 
     remaining_records = [
         record for record in candidate_records if record["sample_id"] not in existing_ids
     ]
+    config["_runtime_api_key"] = api_key
     return config, remaining_records, existing_ids, len(records)
 
 
@@ -119,8 +205,9 @@ def generate_negative_instructions(config_path: str | Path) -> Path:
         if record["sample_id"] in existing_ids:
             continue
 
-        parsed = _call_groq(
-            api_key=api_key,
+        parsed = _call_llm(
+            provider=str(config.get("provider", "groq")),
+            api_key=str(config["_runtime_api_key"]),
             api_base=config["api_base"],
             model=config["model"],
             system_prompt=config["system_prompt"],
@@ -163,8 +250,9 @@ def generate_positive_instructions(config_path: str | Path) -> Path:
         tqdm(remaining_records, desc="Generating positives", total=len(remaining_records)),
         start=1,
     ):
-        parsed = _call_groq(
-            api_key=os.getenv("GROQ_API_KEY", ""),
+        parsed = _call_llm(
+            provider=str(config.get("provider", "groq")),
+            api_key=str(config["_runtime_api_key"]),
             api_base=config["api_base"],
             model=config["model"],
             system_prompt=config["system_prompt"],
