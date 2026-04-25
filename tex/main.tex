@@ -73,6 +73,40 @@
     \newpage
 }
 
+% promptbox
+\usepackage[most]{tcolorbox}
+\usepackage{xcolor}
+
+\definecolor{PromptBg}{HTML}{F4F8FC}
+\definecolor{PromptFrame}{HTML}{7A9EBE}
+\definecolor{PromptTitleBg}{HTML}{DCEAF7}
+\definecolor{PromptTitleText}{HTML}{2F4F6F}
+
+\newtcolorbox{promptnegbox}{
+  enhanced,
+  breakable,
+  colback=PromptBg,
+  colframe=PromptFrame,
+  boxrule=1pt,
+  arc=1.5mm,
+  left=4mm,
+  right=3mm,
+  top=3mm,
+  bottom=3mm,
+  title={Промпт для генерации негативных инструкций},
+  coltitle=PromptTitleText,
+  fonttitle=\bfseries,
+  colbacktitle=PromptTitleBg,
+  attach boxed title to top left={xshift=3mm,yshift=-2mm},
+  boxed title style={
+    boxrule=0.6pt,
+    colframe=PromptFrame,
+    arc=1mm
+  }
+}
+% promptbox
+
+
 \begin{document}
 
 \maketitlepage
@@ -246,6 +280,8 @@ The Russian-focused embedders' exploration: ruMTEB benchmark and Russian embeddi
 
 Как видно из таблицы, без дообучения модели показывают неплохие результаты по метрике nDCG, но достаточно слабые результаты по метрике pMRR. Дальнейшие эксперименты будут направлены на обучение модели таким образом, чтобы при сохранении высокого качества поиска она демонстрировала значительный прирост по метрике pMRR. 
 
+\footnotetext[1]{При тестировании использовался формат \texttt{query: \{запрос\}} и \texttt{passage: \{текст\}}}
+
 \subsection{Сбор датасета}
 
 За основу датасета для дообучения на инструктивных негативах берется 
@@ -257,8 +293,22 @@ SberQuAD. Для каждого примера (контекст, вопрос, 
 качестве генератора использовалась llama3-8b \cite{llama3modelcard}.
 Всего было сгенерировано 10 тысяч негативных инструкций к SberQuAD. 
 
-
-\footnotetext[1]{При тестировании использовался формат \texttt{query: \{запрос\}} и \texttt{passage: \{текст\}}}
+\begin{promptnegbox}
+\small
+Ты помогаешь строить обучающий датасет для instruction-following retrieval.
+По паре вопрос-контекст нужно придумать ОДНУ негативную инструкцию на русском языке.
+Негативная инструкция должна:
+\begin{spacing}{0.8}
+\begin{enumerate}
+    \item звучать как реальная поисковая инструкция;
+    \item быть тематически близкой к вопросу;
+    \item делать данный контекст НЕподходящим;
+    \item не должна зависеть от скрытой разметки;
+    \item не должна быть бессмысленной или противоречивой.
+\end{enumerate}
+\end{spacing}
+Верни JSON с полями: \texttt{negative\_instruction}, \texttt{violation\_reason}. 
+\end{promptnegbox}
 
 \newpage
 

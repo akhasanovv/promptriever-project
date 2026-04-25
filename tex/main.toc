@@ -14,5 +14,5 @@
 \contentsline {subsection}{\numberline {2.7}ruMTEB}{4}{}%
 \contentsline {section}{\numberline {3}Основная часть}{4}{}%
 \contentsline {subsection}{\numberline {3.1}Первые эксперименты}{4}{}%
-\contentsline {subsection}{\numberline {3.2}Сбор датасета}{4}{}%
+\contentsline {subsection}{\numberline {3.2}Сбор датасета}{5}{}%
 \contentsline {section}{Список использованных источников}{6}{}%
