@@ -19,6 +19,31 @@
 
 \refsection{0}
   \datalist[entry]{nty/global//global/global}
+    \entry{llama3modelcard}{article}{}
+      \name{author}{1}{}{%
+        {{hash=9e311d19c1c0920c945c2b2667367608}{%
+           family={AI@Meta},
+           familyi={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{9e311d19c1c0920c945c2b2667367608}
+      \strng{fullhash}{9e311d19c1c0920c945c2b2667367608}
+      \strng{bibnamehash}{9e311d19c1c0920c945c2b2667367608}
+      \strng{authorbibnamehash}{9e311d19c1c0920c945c2b2667367608}
+      \strng{authornamehash}{9e311d19c1c0920c945c2b2667367608}
+      \strng{authorfullhash}{9e311d19c1c0920c945c2b2667367608}
+      \field{sortinit}{A}
+      \field{sortinithash}{2f401846e2029bad6b3ecc16d50031e2}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Llama 3 Model Card}
+      \field{year}{2024}
+      \verb{urlraw}
+      \verb https://github.com/meta-llama/llama3/blob/main/MODEL_CARD.md
+      \endverb
+      \verb{url}
+      \verb https://github.com/meta-llama/llama3/blob/main/MODEL_CARD.md
+      \endverb
+    \endentry
     \entry{chen2025m3embeddingmultilingualitymultifunctionalitymultigranularity}{misc}{}
       \name{author}{6}{}{%
         {{hash=e24c13695b0b0d62c63b9422b5c4fa5d}{%

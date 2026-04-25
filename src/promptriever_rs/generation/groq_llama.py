@@ -63,10 +63,18 @@ def generate_negative_instructions(config_path: str | Path) -> Path:
     input_path = Path(config["input_path"])
     output_path = Path(config["output_path"])
     records = read_jsonl(input_path)
+    start_index = int(config.get("start_index", 0))
 
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise EnvironmentError("GROQ_API_KEY is not set.")
+
+    if start_index < 0:
+        raise ValueError("start_index must be non-negative.")
+    if start_index > len(records):
+        raise ValueError(
+            f"start_index={start_index} is larger than the dataset size ({len(records)})."
+        )
 
     existing_ids: set[str] = set()
     if config.get("resume", True) and output_path.exists():
@@ -74,9 +82,21 @@ def generate_negative_instructions(config_path: str | Path) -> Path:
 
     delay = 60.0 / max(int(config.get("requests_per_minute", 25)), 1)
 
-    remaining_records = [record for record in records if record["sample_id"] not in existing_ids]
+    candidate_records = records[start_index:]
+    remaining_records = [
+        record for record in candidate_records if record["sample_id"] not in existing_ids
+    ]
 
-    for record in tqdm(remaining_records, desc="Generating negatives", total=len(remaining_records)):
+    print(
+        "Negative generation summary: "
+        f"dataset_size={len(records)}, start_index={start_index}, "
+        f"already_generated={len(existing_ids)}, to_generate={len(remaining_records)}"
+    )
+
+    for offset, record in enumerate(
+        tqdm(remaining_records, desc="Generating negatives", total=len(remaining_records)),
+        start=1,
+    ):
         if record["sample_id"] in existing_ids:
             continue
 
@@ -97,6 +117,12 @@ def generate_negative_instructions(config_path: str | Path) -> Path:
                 "violation_reason": parsed.get("violation_reason", "").strip(),
             },
         )
+        if offset == 1 or offset % 50 == 0:
+            original_index = start_index + offset - 1
+            print(
+                f"Saved negative instruction {offset}/{len(remaining_records)} "
+                f"(approx original index >= {original_index}, sample_id={record['sample_id']})"
+            )
         time.sleep(delay)
 
     return output_path

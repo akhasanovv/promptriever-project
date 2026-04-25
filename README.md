@@ -60,6 +60,15 @@ promptriever-rs generation generate-negatives \
   --config configs/dataset/sberquad_negative_generation.yaml
 ```
 
+Чтобы возобновить генерацию с произвольного места, выставьте в конфиге:
+
+```yaml
+resume: true
+start_index: 12000
+```
+
+Тогда генератор начнет просмотр входного `jsonl` с индекса `12000` и дополнительно пропустит все `sample_id`, которые уже есть в выходном файле.
+
 3. Собрать train/val dataset:
 
 ```bash
