@@ -31,7 +31,9 @@ promptriever-rs data build-sberquad \
   --config configs/dataset/sberquad_base.yaml
 ```
 
-2. Сгенерировать запросы к Llama-8B через Groq:
+2. Сгенерировать синтетические инструкции с помощью LLM:
+
+Интерфейс для Groq:
 
 ```bash
 export GROQ_API_KEY=...
@@ -42,7 +44,7 @@ promptriever-rs generation generate-negatives \
   --config configs/dataset/sberquad_negative_generation.yaml
 ```
 
-Для OpenRouter есть отдельный конфиг-заглушка с `openai/gpt-oss-20b`:
+Интерфейс для Openrouter:
 
 ```bash
 export OPENROUTER_API_KEY=...
