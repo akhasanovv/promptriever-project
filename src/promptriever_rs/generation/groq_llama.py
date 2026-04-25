@@ -83,13 +83,16 @@ def _call_openrouter(
     max_tokens: int,
 ) -> dict:
     try:
-        from openrouter import OpenRouter
+        from openai import OpenAI
     except ImportError as exc:
         raise ImportError(
             "openrouter is required for instruction generation. Install it in your environment first."
         ) from exc
         
-    client = OpenRouter(api_key=api_key)
+    client = OpenAI(
+        base_url=api_base,
+        api_key=api_key,
+    )
 
     chat_completion = client.chat.completions.create(
         messages=[

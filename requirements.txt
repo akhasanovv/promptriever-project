@@ -17,3 +17,4 @@ tokenizers==0.22.2
 safetensors==0.7.0
 requests==2.32.5
 pytest==8.4.2
+openai==2.32.0

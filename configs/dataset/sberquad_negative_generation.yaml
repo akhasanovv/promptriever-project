@@ -7,7 +7,7 @@ temperature: 0.2
 max_tokens: 220
 requests_per_minute: 25
 resume: true
-start_index: 3000
+start_index: 4200
 system_prompt: |
   Ты помогаешь строить обучающий датасет для instruction-following retrieval.
   По паре вопрос-контекст нужно придумать ОДНУ негативную инструкцию на русском языке.
