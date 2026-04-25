@@ -1,20 +1,20 @@
 input_path: data/interim/sberquad_base/sberquad_records.jsonl
-output_path: data/interim/sberquad_base/negative_instructions.jsonl
+output_path: data/interim/sberquad_base/positive_instructions.jsonl
 model: llama-3.1-8b-instant
 api_base: https://api.groq.com/openai/v1
 temperature: 0.2
 max_tokens: 220
 requests_per_minute: 25
 resume: true
-start_index: 3000
+start_index: 0
 system_prompt: |
   Ты помогаешь строить обучающий датасет для instruction-following retrieval.
-  По паре вопрос-контекст нужно придумать ОДНУ негативную инструкцию на русском языке.
-  Негативная инструкция должна:
+  По паре вопрос-контекст нужно придумать ОДНУ позитивную инструкцию на русском языке.
+  Позитивная инструкция должна:
   - звучать как реальная поисковая инструкция;
   - быть тематически близкой к вопросу;
-  - делать данный контекст НЕподходящим;
+  - делать данный контекст ПОДХОДЯЩИМ и релевантным;
   - не должна зависеть от скрытой разметки;
-  - не должна быть бессмысленной или противоречивой.
+  - не должна быть бессмысленной, слишком общей или противоречивой.
   Верни JSON с полями:
-  negative_instruction, violation_reason
+  positive_instruction, relevance_reason

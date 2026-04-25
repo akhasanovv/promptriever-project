@@ -1,0 +1,7 @@
+dataset_build_config: configs/dataset/sberquad_base.yaml
+positive_generation_config: configs/dataset/sberquad_positive_generation.yaml
+negative_generation_config: configs/dataset/sberquad_negative_generation.yaml
+dataset_assembly_config: configs/dataset/sberquad_instruction_pairs_positive_llm.yaml
+train_config: configs/train/e5_instruction_pairs_positive_llm.yaml
+rumteb_eval_config: configs/eval/rumteb_russian.yaml
+mfollowir_eval_config: configs/eval/mfollowir_russian.yaml

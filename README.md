@@ -35,6 +35,9 @@ promptriever-rs data build-sberquad \
 
 ```bash
 export GROQ_API_KEY=...
+promptriever-rs generation generate-positives \
+  --config configs/dataset/sberquad_positive_generation.yaml
+
 promptriever-rs generation generate-negatives \
   --config configs/dataset/sberquad_negative_generation.yaml
 ```
@@ -55,11 +58,25 @@ promptriever-rs data assemble-training-set \
   --config configs/dataset/sberquad_instruction_pairs.yaml
 ```
 
+Если хотите обучаться не на фиксированной позитивной инструкции, а на LLM-сгенерированных позитивных инструкциях, используйте:
+
+```bash
+promptriever-rs data assemble-training-set \
+  --config configs/dataset/sberquad_instruction_pairs_positive_llm.yaml
+```
+
 4. Дообучить baseline `multilingual-e5-base`:
 
 ```bash
 promptriever-rs train fit \
   --config configs/train/e5_instruction_pairs.yaml
+```
+
+Вариант с LLM-сгенерированными позитивными инструкциями:
+
+```bash
+promptriever-rs train fit \
+  --config configs/train/e5_instruction_pairs_positive_llm.yaml
 ```
 
 В train/eval конфигах поддерживается выбор устройства:

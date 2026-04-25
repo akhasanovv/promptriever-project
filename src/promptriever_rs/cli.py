@@ -6,7 +6,10 @@ from promptriever_rs.data.instruction_dataset import assemble_instruction_datase
 from promptriever_rs.data.sberquad import build_sberquad_records
 from promptriever_rs.evaluation.mfollowir import evaluate_mfollowir
 from promptriever_rs.evaluation.mteb_eval import evaluate_mteb
-from promptriever_rs.generation.groq_llama import generate_negative_instructions
+from promptriever_rs.generation.groq_llama import (
+    generate_negative_instructions,
+    generate_positive_instructions,
+)
 from promptriever_rs.training.train import fit
 
 
@@ -25,6 +28,8 @@ def _build_parser() -> argparse.ArgumentParser:
     generation_subparsers = generation_parser.add_subparsers(dest="command", required=True)
     generate = generation_subparsers.add_parser("generate-negatives")
     generate.add_argument("--config", required=True)
+    generate_pos = generation_subparsers.add_parser("generate-positives")
+    generate_pos.add_argument("--config", required=True)
 
     train_parser = subparsers.add_parser("train")
     train_subparsers = train_parser.add_subparsers(dest="command", required=True)
@@ -55,6 +60,10 @@ def main() -> None:
         return
     if args.group == "generation" and args.command == "generate-negatives":
         path = generate_negative_instructions(args.config)
+        print(path)
+        return
+    if args.group == "generation" and args.command == "generate-positives":
+        path = generate_positive_instructions(args.config)
         print(path)
         return
     if args.group == "train" and args.command == "fit":
