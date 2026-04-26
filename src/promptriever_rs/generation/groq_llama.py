@@ -67,8 +67,8 @@ def _call_groq(
     content = chat_completion.choices[0].message.content
     parsed = json.loads(content)
     
-    if "negative_instruction" not in parsed:
-        raise ValueError("Groq response does not contain 'negative_instruction'.")
+    if "negative_instruction" not in parsed and "positive_instruction" not in parsed:
+        raise ValueError("Groq response does not contain 'negative_instruction' or 'positive_instruction'.")
     return parsed
 
 
@@ -108,8 +108,8 @@ def _call_openrouter(
     content = chat_completion.choices[0].message.content
     parsed = json.loads(content)
     
-    if "negative_instruction" not in parsed:
-        raise ValueError("Groq response does not contain 'negative_instruction'.")
+    if "negative_instruction" not in parsed and "positive_instruction" not in parsed:
+        raise ValueError("Groq response does not contain 'negative_instruction' or 'positive_instruction'.")
     return parsed
 
 
