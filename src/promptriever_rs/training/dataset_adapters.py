@@ -36,3 +36,33 @@ def build_mnrl_pairs(records: list[dict], model_spec) -> list[Any]:
         passage = model_spec.format_document(row["positive_passage"])
         samples.append(InputExample(texts=[positive_query, passage]))
     return samples
+
+
+def build_promptriever_examples(
+    records: list[dict],
+    model_spec,
+    negatives_per_sample: int = 3,
+    include_hard_negatives: bool = True,
+) -> list[Any]:
+    InputExample = require_sentence_transformers()
+    samples: list[Any] = []
+    target_negatives = max(1, int(negatives_per_sample))
+
+    for row in tqdm(records, desc="Building Promptriever examples", total=len(records)):
+        anchor = model_spec.format_query(row["query"], row.get("instruction"))
+        positive = model_spec.format_document(row["positive_passage"])
+
+        negatives: list[str] = []
+        negatives.extend(row.get("instruction_negative_passages", []))
+        if include_hard_negatives:
+            negatives.extend(row.get("hard_negative_passages", []))
+        cleaned_negatives = [model_spec.format_document(text) for text in negatives if str(text).strip()]
+        if not cleaned_negatives:
+            continue
+
+        selected_negatives = cleaned_negatives[:target_negatives]
+        while len(selected_negatives) < target_negatives:
+            selected_negatives.append(selected_negatives[-1])
+
+        samples.append(InputExample(texts=[anchor, positive, *selected_negatives]))
+    return samples

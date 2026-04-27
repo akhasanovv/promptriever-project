@@ -1,0 +1,10 @@
+base_records_path: data/interim/sberquad_base/sberquad_records.jsonl
+generated_passages_path: data/interim/sberquad_base/promptriever_passages.jsonl
+output_path: data/processed/sberquad_promptriever.jsonl
+use_generated_positive_passage: true
+include_answer_in_metadata: true
+min_instruction_negatives: 1
+splits:
+  - train
+  - validation
+  - test

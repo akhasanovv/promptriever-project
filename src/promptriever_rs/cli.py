@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import argparse
 
-from promptriever_rs.data.instruction_dataset import assemble_instruction_dataset
+from promptriever_rs.data.instruction_dataset import (
+    assemble_instruction_dataset,
+    assemble_promptriever_dataset,
+)
 from promptriever_rs.data.sberquad import build_sberquad_records
 from promptriever_rs.evaluation.mfollowir import evaluate_mfollowir
 from promptriever_rs.evaluation.mteb_eval import evaluate_mteb
 from promptriever_rs.generation.groq_llama import (
     generate_negative_instructions,
     generate_positive_instructions,
+    generate_promptriever_passages,
 )
 from promptriever_rs.training.train import fit
 
@@ -23,6 +27,8 @@ def _build_parser() -> argparse.ArgumentParser:
     build_sberquad.add_argument("--config", required=True)
     assemble = data_subparsers.add_parser("assemble-training-set")
     assemble.add_argument("--config", required=True)
+    assemble_promptriever = data_subparsers.add_parser("assemble-promptriever-set")
+    assemble_promptriever.add_argument("--config", required=True)
 
     generation_parser = subparsers.add_parser("generation")
     generation_subparsers = generation_parser.add_subparsers(dest="command", required=True)
@@ -30,6 +36,8 @@ def _build_parser() -> argparse.ArgumentParser:
     generate.add_argument("--config", required=True)
     generate_pos = generation_subparsers.add_parser("generate-positives")
     generate_pos.add_argument("--config", required=True)
+    generate_passages = generation_subparsers.add_parser("generate-passages")
+    generate_passages.add_argument("--config", required=True)
 
     train_parser = subparsers.add_parser("train")
     train_subparsers = train_parser.add_subparsers(dest="command", required=True)
@@ -58,12 +66,20 @@ def main() -> None:
         path = assemble_instruction_dataset(args.config)
         print(path)
         return
+    if args.group == "data" and args.command == "assemble-promptriever-set":
+        path = assemble_promptriever_dataset(args.config)
+        print(path)
+        return
     if args.group == "generation" and args.command == "generate-negatives":
         path = generate_negative_instructions(args.config)
         print(path)
         return
     if args.group == "generation" and args.command == "generate-positives":
         path = generate_positive_instructions(args.config)
+        print(path)
+        return
+    if args.group == "generation" and args.command == "generate-passages":
+        path = generate_promptriever_passages(args.config)
         print(path)
         return
     if args.group == "train" and args.command == "fit":

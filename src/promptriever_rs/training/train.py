@@ -12,6 +12,7 @@ from promptriever_rs.models.registry import load_model_spec
 from promptriever_rs.training.dataset_adapters import (
     build_binary_instruction_pairs,
     build_mnrl_pairs,
+    build_promptriever_examples,
 )
 from promptriever_rs.utils.device import resolve_device
 from promptriever_rs.utils.io import read_jsonl
@@ -190,6 +191,26 @@ def fit(config_path: str | Path) -> Path:
         train_dataset = build_mnrl_pairs(train_rows, model_spec)
         eval_dataset = build_mnrl_pairs(eval_rows, model_spec)
         loss = losses.MultipleNegativesRankingLoss(model)
+        evaluator = None
+    elif mode == "promptriever":
+        negatives_per_sample = int(config.get("negatives_per_sample", 3))
+        include_hard_negatives = bool(config.get("include_hard_negatives", True))
+        train_dataset = build_promptriever_examples(
+            train_rows,
+            model_spec,
+            negatives_per_sample=negatives_per_sample,
+            include_hard_negatives=include_hard_negatives,
+        )
+        eval_dataset = build_promptriever_examples(
+            eval_rows,
+            model_spec,
+            negatives_per_sample=negatives_per_sample,
+            include_hard_negatives=include_hard_negatives,
+        )
+        loss = losses.MultipleNegativesRankingLoss(
+            model,
+            scale=1.0 / float(config.get("temperature", 0.01)),
+        )
         evaluator = None
     else:
         raise ValueError(f"Unsupported training_mode: {mode}")

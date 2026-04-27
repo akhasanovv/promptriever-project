@@ -38,6 +38,21 @@
 - только позитивные инструкции,
 - позитивные и негативные бинарные пары,
 - in-batch negatives,
-- passage hard negatives.
+- passage hard negatives,
+- Promptriever-style instruction-negative passages.
 
 Именно поэтому train-код опирается на `training_mode`, а dataset schema оставляет место под `negative_passages`.
+
+## 5. Для faithful reproduction нужен режим, где negative живет на уровне passage
+
+Статья Promptriever делает упор не на `negative_instruction` для того же passage, а на passages, которые:
+
+- релевантны базовому вопросу;
+- нарушают дополнительное условие инструкции.
+
+Поэтому основной рекомендуемый режим в коде должен использовать:
+
+- `instruction` как часть anchor,
+- отдельный `positive_passage`,
+- отдельные `instruction_negative_passages`,
+- contrastive loss по passages.

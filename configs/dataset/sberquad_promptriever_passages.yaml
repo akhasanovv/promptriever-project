@@ -1,0 +1,34 @@
+base_records_path: data/interim/sberquad_base/sberquad_records.jsonl
+instructions_path: data/interim/sberquad_base/positive_instructions.jsonl
+instruction_key: positive_instruction
+output_path: data/interim/sberquad_base/promptriever_passages.jsonl
+provider: groq
+model: llama-3.1-8b-instant
+api_base: https://api.groq.com/openai/v1
+temperature: 0.2
+max_tokens: 700
+requests_per_minute: 20
+num_instruction_negatives: 3
+resume: true
+start_index: 0
+splits:
+  - train
+  - validation
+  - test
+system_prompt: |
+  Ты помогаешь строить instruction-following retrieval датасет по рецепту Promptriever.
+  Для каждого примера нужно создать passages, которые позволяют обучать bi-encoder
+  учитывать инструкцию на уровне конкретного запроса.
+
+  Верни JSON со следующими полями:
+  - generated_positive_passage: passage, релевантный и вопросу, и инструкции
+  - instruction_negative_passages: список из нескольких passages, которые релевантны исходному вопросу,
+    но НЕ удовлетворяют дополнительному условию инструкции
+  - positive_rationale: краткое объяснение, почему positive passage подходит
+  - negative_rationales: список кратких объяснений, почему каждый negative нарушает инструкцию
+
+  Требования:
+  - passages должны быть правдоподобными и естественными;
+  - нельзя делать negative явно абсурдным или нерелевантным теме;
+  - negative должен отвечать базовому вопросу, но не проходить по instruction;
+  - верни только JSON без markdown.
