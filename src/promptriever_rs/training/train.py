@@ -31,6 +31,68 @@ def _require_training_stack():
     return torch, SentenceTransformer, losses, DataLoader, Accelerator, EmbeddingSimilarityEvaluator
 
 
+def _count_params(module) -> tuple[int, int]:
+    total = 0
+    trainable = 0
+    for param in module.parameters():
+        count = param.numel()
+        total += count
+        if param.requires_grad:
+            trainable += count
+    return total, trainable
+
+
+def _apply_lora(model, config: dict) -> dict:
+    try:
+        from peft import LoraConfig, TaskType, get_peft_model
+    except ImportError as exc:
+        raise ImportError(
+            "PEFT is required for LoRA training. Install with `pip install -e .[train]` or `pip install peft`."
+        ) from exc
+
+    if len(model) == 0 or not hasattr(model[0], "auto_model"):
+        raise ValueError("SentenceTransformer backbone does not expose `auto_model` for LoRA injection.")
+
+    lora_cfg = config.get("lora", {})
+    target_modules = lora_cfg.get("target_modules", ["query", "key", "value"])
+    modules_to_save = lora_cfg.get("modules_to_save")
+    if isinstance(modules_to_save, list) and len(modules_to_save) == 0:
+        modules_to_save = None
+
+    peft_config = LoraConfig(
+        task_type=TaskType.FEATURE_EXTRACTION,
+        inference_mode=False,
+        r=int(lora_cfg.get("r", 16)),
+        lora_alpha=int(lora_cfg.get("alpha", 32)),
+        lora_dropout=float(lora_cfg.get("dropout", 0.05)),
+        bias=str(lora_cfg.get("bias", "none")),
+        target_modules=target_modules,
+        modules_to_save=modules_to_save,
+    )
+
+    backbone = model[0].auto_model
+    model[0].auto_model = get_peft_model(backbone, peft_config)
+
+    total, trainable = _count_params(model[0].auto_model)
+    ratio = (100.0 * trainable / total) if total > 0 else 0.0
+    print(
+        "LoRA enabled: "
+        f"r={peft_config.r}, alpha={peft_config.lora_alpha}, dropout={peft_config.lora_dropout}, "
+        f"target_modules={target_modules}, trainable={trainable}/{total} ({ratio:.2f}%)"
+    )
+    return {
+        "enabled": True,
+        "r": peft_config.r,
+        "alpha": peft_config.lora_alpha,
+        "dropout": peft_config.lora_dropout,
+        "bias": peft_config.bias,
+        "target_modules": list(target_modules) if isinstance(target_modules, (list, tuple)) else target_modules,
+        "modules_to_save": modules_to_save,
+        "trainable_params": trainable,
+        "total_params": total,
+    }
+
+
 def _patch_accelerate_unwrap_model_if_needed(Accelerator) -> None:
     signature = inspect.signature(Accelerator.unwrap_model)
     if "keep_torch_compile" in signature.parameters:
@@ -104,6 +166,14 @@ def fit(config_path: str | Path) -> Path:
 
     device = resolve_device(torch, config.get("device", "auto"))
     model = SentenceTransformer(model_spec.hf_id, device=device)
+    use_lora = bool(config.get("use_lora", True))
+    lora_summary = {"enabled": False}
+    if use_lora:
+        lora_summary = _apply_lora(model, config)
+    else:
+        total, trainable = _count_params(model)
+        print(f"LoRA disabled: training full model ({trainable}/{total} trainable parameters).")
+        lora_summary.update({"trainable_params": trainable, "total_params": total})
 
     mode = config.get("training_mode", "binary_instruction_pairs")
     if mode == "binary_instruction_pairs":
@@ -176,6 +246,7 @@ def fit(config_path: str | Path) -> Path:
         "model_name": model_spec.name,
         "hf_id": model_spec.hf_id,
         "device": device,
+        "lora": lora_summary,
         "training_mode": mode,
         "evaluation_steps": evaluation_steps,
         "train_samples": len(train_dataset),

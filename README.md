@@ -99,6 +99,20 @@ promptriever-rs train fit \
 Для Apple Silicon используйте `device: mps`. Для NVIDIA GPU — `device: cuda`.
 Параметр `use_fp16: true` имеет смысл только на `cuda`; на `mps` и `cpu` он автоматически отключается.
 
+Обучение по умолчанию идет через LoRA (`use_lora: true`). Гиперпараметры LoRA задаются прямо в train-конфиге:
+
+```yaml
+use_lora: true
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [query, key, value]
+  bias: none
+```
+
+Для экспериментов меняйте `lora.r`, `lora.alpha`, `lora.dropout`, `batch_size`, `learning_rate` и `num_epochs` в yaml-файле без изменения кода.
+
 5. Прогнать оценку:
 
 ```bash
