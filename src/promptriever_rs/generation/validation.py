@@ -9,6 +9,24 @@ from promptriever_rs.utils.io import read_jsonl, write_jsonl
 from promptriever_rs.validation.judges import RerankerJudge
 
 
+def _print_positive_summary(rows: list[dict]) -> None:
+    num_valid = sum(1 for row in rows if row.get("is_valid", False))
+    print(
+        "Positive instruction validation summary: "
+        f"validated={len(rows)}, is_valid={num_valid}, invalid={len(rows) - num_valid}"
+    )
+
+
+def _print_passage_summary(rows: list[dict]) -> None:
+    num_positive_valid = sum(1 for row in rows if row.get("generated_positive_is_valid", False))
+    num_negative_valid = sum(len(row.get("instruction_negative_passages", [])) for row in rows)
+    print(
+        "Generated passage validation summary: "
+        f"validated_rows={len(rows)}, positive_is_valid={num_positive_valid}, "
+        f"instruction_negative_is_valid={num_negative_valid}"
+    )
+
+
 def validate_positive_instructions(config_path: str | Path) -> Path:
     config = load_yaml(config_path)
     base_records = read_jsonl(config["base_records_path"])
@@ -35,6 +53,7 @@ def validate_positive_instructions(config_path: str | Path) -> Path:
             [(combined_query, row["positive_passage"])],
             batch_size=1,
         )[0]
+        is_valid = bool(score >= threshold)
 
         output_rows.append(
             {
@@ -42,12 +61,13 @@ def validate_positive_instructions(config_path: str | Path) -> Path:
                 "positive_instruction": positive["positive_instruction"].strip(),
                 "relevance_reason": positive.get("relevance_reason", "").strip(),
                 "validation_score": score,
-                "is_valid": bool(score >= threshold),
+                "is_valid": is_valid,
             }
         )
 
     output_path = Path(config["output_path"])
     write_jsonl(output_path, output_rows)
+    _print_positive_summary(output_rows)
     return output_path
 
 
@@ -132,4 +152,52 @@ def validate_promptriever_passages(config_path: str | Path) -> Path:
 
     output_path = Path(config["output_path"])
     write_jsonl(output_path, output_rows)
+    _print_passage_summary(output_rows)
+    return output_path
+
+
+def apply_positive_thresholds(config_path: str | Path) -> Path:
+    config = load_yaml(config_path)
+    rows = read_jsonl(config["input_path"])
+    threshold = float(config.get("positive_threshold", 0.0))
+
+    output_rows: list[dict] = []
+    for row in rows:
+        updated_row = dict(row)
+        updated_row["is_valid"] = bool(float(row["validation_score"]) >= threshold)
+        output_rows.append(updated_row)
+
+    output_path = Path(config.get("output_path", config["input_path"]))
+    write_jsonl(output_path, output_rows)
+    _print_positive_summary(output_rows)
+    return output_path
+
+
+def apply_passage_thresholds(config_path: str | Path) -> Path:
+    config = load_yaml(config_path)
+    rows = read_jsonl(config["input_path"])
+    instruction_positive_threshold = float(config.get("instruction_positive_threshold", 0.0))
+    query_positive_threshold = float(config.get("query_positive_threshold", 0.0))
+    instruction_negative_threshold = float(config.get("instruction_negative_threshold", 0.0))
+
+    output_rows: list[dict] = []
+    for row in rows:
+        updated_row = dict(row)
+        updated_row["generated_positive_is_valid"] = bool(
+            float(row.get("generated_positive_score", float("-inf"))) >= instruction_positive_threshold
+        )
+
+        validated_negatives: list[str] = []
+        for score_row in row.get("instruction_negative_scores", []):
+            query_score = float(score_row["query_score"])
+            query_instruction_score = float(score_row["query_instruction_score"])
+            if query_score >= query_positive_threshold and query_instruction_score <= instruction_negative_threshold:
+                validated_negatives.append(str(score_row["passage"]).strip())
+
+        updated_row["instruction_negative_passages"] = validated_negatives
+        output_rows.append(updated_row)
+
+    output_path = Path(config.get("output_path", config["input_path"]))
+    write_jsonl(output_path, output_rows)
+    _print_passage_summary(output_rows)
     return output_path

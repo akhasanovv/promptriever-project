@@ -16,6 +16,8 @@ from promptriever_rs.generation.groq_llama import (
     generate_promptriever_passages,
 )
 from promptriever_rs.generation.validation import (
+    apply_passage_thresholds,
+    apply_positive_thresholds,
     validate_positive_instructions,
     validate_promptriever_passages,
 )
@@ -49,6 +51,10 @@ def _build_parser() -> argparse.ArgumentParser:
     validate_pos.add_argument("--config", required=True)
     validate_passages = generation_subparsers.add_parser("validate-passages")
     validate_passages.add_argument("--config", required=True)
+    apply_pos_thresholds = generation_subparsers.add_parser("apply-positive-thresholds")
+    apply_pos_thresholds.add_argument("--config", required=True)
+    apply_passage_thresholds_parser = generation_subparsers.add_parser("apply-passage-thresholds")
+    apply_passage_thresholds_parser.add_argument("--config", required=True)
 
     train_parser = subparsers.add_parser("train")
     train_subparsers = train_parser.add_subparsers(dest="command", required=True)
@@ -103,6 +109,14 @@ def main() -> None:
         return
     if args.group == "generation" and args.command == "validate-passages":
         path = validate_promptriever_passages(args.config)
+        print(path)
+        return
+    if args.group == "generation" and args.command == "apply-positive-thresholds":
+        path = apply_positive_thresholds(args.config)
+        print(path)
+        return
+    if args.group == "generation" and args.command == "apply-passage-thresholds":
+        path = apply_passage_thresholds(args.config)
         print(path)
         return
     if args.group == "train" and args.command == "fit":

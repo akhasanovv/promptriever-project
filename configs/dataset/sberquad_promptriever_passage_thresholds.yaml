@@ -1,0 +1,5 @@
+input_path: data/interim/sberquad_base/promptriever_passages_validated.jsonl
+output_path: data/interim/sberquad_base/promptriever_passages_validated.jsonl
+query_positive_threshold: 0.0
+instruction_positive_threshold: 0.0
+instruction_negative_threshold: 0.0

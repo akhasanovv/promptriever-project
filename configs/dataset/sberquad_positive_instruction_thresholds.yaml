@@ -1,0 +1,3 @@
+input_path: data/interim/sberquad_base/positive_instructions_validated.jsonl
+output_path: data/interim/sberquad_base/positive_instructions_validated.jsonl
+positive_threshold: 2.6

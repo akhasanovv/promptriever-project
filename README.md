@@ -75,6 +75,13 @@ promptriever-rs generation validate-positives \
   --config configs/dataset/sberquad_positive_instruction_validation.yaml
 ```
 
+Если нужно только поменять порог валидности, повторно запускать judge не требуется. Достаточно пере-применить threshold к уже сохраненным `validation_score`:
+
+```bash
+promptriever-rs generation apply-positive-thresholds \
+  --config configs/dataset/sberquad_positive_instruction_thresholds.yaml
+```
+
 ### 4. Поиск hard negatives по query
 
 Для каждого запроса извлекаются top-k кандидаты из векторной базы, после чего judge-модель отфильтровывает passages, не отвечающие на исходный `query`. В итоговый датасет сохраняются 2 таких passage.
@@ -106,6 +113,19 @@ Judge-модель проверяет:
 ```bash
 promptriever-rs generation validate-passages \
   --config configs/dataset/sberquad_promptriever_passage_validation.yaml
+```
+
+Если требуется изменить пороги для:
+
+- `generated_positive_is_valid`
+- соответствия `instruction_negative_passages` базовому `query`
+- несоответствия `instruction_negative_passages` полному `query + instruction`
+
+можно выполнить быструю пере-разметку по уже сохраненным score-значениям без повторного запуска judge:
+
+```bash
+promptriever-rs generation apply-passage-thresholds \
+  --config configs/dataset/sberquad_promptriever_passage_thresholds.yaml
 ```
 
 ### 7. Сборка обучающего датасета
