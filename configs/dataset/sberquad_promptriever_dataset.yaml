@@ -1,9 +1,14 @@
 base_records_path: data/interim/sberquad_base/sberquad_records.jsonl
-generated_passages_path: data/interim/sberquad_base/promptriever_passages.jsonl
+generated_passages_path: data/interim/sberquad_base/promptriever_passages_validated.jsonl
+positive_instruction_validation_path: data/interim/sberquad_base/positive_instructions_validated.jsonl
+hard_negatives_path: data/interim/sberquad_base/hard_negatives.jsonl
 output_path: data/processed/sberquad_promptriever.jsonl
 use_generated_positive_passage: true
 include_answer_in_metadata: true
+require_positive_instruction_validation: true
+require_generated_positive_validation: true
 min_instruction_negatives: 1
+min_hard_negatives: 2
 splits:
   - train
   - validation

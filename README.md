@@ -66,7 +66,25 @@ promptriever-rs generation generate-positives \
   --config configs/dataset/sberquad_positive_generation.yaml
 ```
 
-### 3. Генерация Promptriever-style passages
+### 3. Валидация позитивных инструкций
+
+Для правильной версии датасета позитивные инструкции дополнительно фильтруются judge-моделью, которая проверяет, что `query + instruction` по-прежнему соответствует исходному passage.
+
+```bash
+promptriever-rs generation validate-positives \
+  --config configs/dataset/sberquad_positive_instruction_validation.yaml
+```
+
+### 4. Поиск hard negatives по query
+
+Для каждого запроса извлекаются top-k кандидаты из векторной базы, после чего judge-модель отфильтровывает passages, не отвечающие на исходный `query`. В итоговый датасет сохраняются 2 таких passage.
+
+```bash
+promptriever-rs data mine-hard-negatives \
+  --config configs/dataset/sberquad_hard_negatives.yaml
+```
+
+### 5. Генерация Promptriever-style passages
 
 На этом шаге создаются:
 
@@ -78,14 +96,26 @@ promptriever-rs generation generate-passages \
   --config configs/dataset/sberquad_promptriever_passages.yaml
 ```
 
-### 4. Сборка обучающего датасета
+### 6. Валидация сгенерированных passages
+
+Judge-модель проверяет:
+
+- что `generated_positive_passage` подходит к `query + instruction`
+- что каждый `instruction_negative_passage` подходит к `query`, но не подходит к `query + instruction`
+
+```bash
+promptriever-rs generation validate-passages \
+  --config configs/dataset/sberquad_promptriever_passage_validation.yaml
+```
+
+### 7. Сборка обучающего датасета
 
 ```bash
 promptriever-rs data assemble-promptriever-set \
   --config configs/dataset/sberquad_promptriever_dataset.yaml
 ```
 
-### 5. Обучение ретривера
+### 8. Обучение ретривера
 
 ```bash
 promptriever-rs train fit \
@@ -96,10 +126,10 @@ promptriever-rs train fit \
 
 - anchor: `query + instruction`
 - positive: `positive_passage`
-- negatives: `instruction_negative_passages`
+- negatives: `instruction_negative_passages` и `hard_negative_passages`
 - loss: `MultipleNegativesRankingLoss`
 
-### 6. Запуск оценки
+### 9. Запуск оценки
 
 ```bash
 promptriever-rs eval rumteb \
@@ -196,10 +226,15 @@ lora:
     "Пассаж отвечает на базовый вопрос, но не содержит год публикации ...",
     "Пассаж по той же теме, но с нарушением условия инструкции ..."
   ],
-  "hard_negative_passages": [],
+  "hard_negative_passages": [
+    "Пассаж из корпуса, не отвечающий на исходный запрос ...",
+    "Еще один hard negative passage ..."
+  ],
   "metadata": {
     "source_dataset": "kuznetsoffandrey/sberquad",
-    "context_id": "ctx-001234"
+    "context_id": "ctx-001234",
+    "generated_positive_score": 3.42,
+    "hard_negative_scores": [-1.27, -0.84]
   }
 }
 ```

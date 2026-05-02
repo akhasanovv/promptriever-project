@@ -1,6 +1,9 @@
 dataset_build_config: configs/dataset/sberquad_base.yaml
 positive_generation_config: configs/dataset/sberquad_positive_generation.yaml
+positive_validation_config: configs/dataset/sberquad_positive_instruction_validation.yaml
+hard_negative_mining_config: configs/dataset/sberquad_hard_negatives.yaml
 passage_generation_config: configs/dataset/sberquad_promptriever_passages.yaml
+passage_validation_config: configs/dataset/sberquad_promptriever_passage_validation.yaml
 dataset_assembly_config: configs/dataset/sberquad_promptriever_dataset.yaml
 train_config: configs/train/e5_promptriever.yaml
 rumteb_eval_config: configs/eval/rumteb_russian.yaml

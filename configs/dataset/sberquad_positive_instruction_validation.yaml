@@ -1,0 +1,9 @@
+base_records_path: data/interim/sberquad_base/sberquad_records.jsonl
+positive_instructions_path: data/interim/sberquad_base/positive_instructions.jsonl
+output_path: data/interim/sberquad_base/positive_instructions_validated.jsonl
+judge_model: BAAI/bge-reranker-v2-m3
+device: auto
+max_length: 512
+use_fp16: false
+trust_remote_code: false
+positive_threshold: 0.0

@@ -1,0 +1,14 @@
+base_records_path: data/interim/sberquad_base/sberquad_records.jsonl
+retrieval_model_config: configs/models/multilingual_e5_base.yaml
+output_path: data/interim/sberquad_base/hard_negatives.jsonl
+device: auto
+embedding_batch_size: 64
+retrieval_top_k: 50
+num_hard_negatives: 2
+judge_model: BAAI/bge-reranker-v2-m3
+judge_device: auto
+judge_batch_size: 8
+judge_max_length: 512
+judge_use_fp16: false
+judge_trust_remote_code: false
+query_negative_threshold: 0.0

@@ -70,11 +70,22 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
     base_records = read_jsonl(config["base_records_path"])
     passage_rows = read_jsonl(config["generated_passages_path"])
     passages_by_id = {row["sample_id"]: row for row in passage_rows}
+    hard_negative_rows = read_jsonl(config["hard_negatives_path"]) if config.get("hard_negatives_path") else []
+    hard_negatives_by_id = {row["sample_id"]: row for row in hard_negative_rows}
+    positive_validation_rows = (
+        read_jsonl(config["positive_instruction_validation_path"])
+        if config.get("positive_instruction_validation_path")
+        else []
+    )
+    positive_validation_by_id = {row["sample_id"]: row for row in positive_validation_rows}
 
     allowed_splits = set(config.get("splits", ["train", "validation", "test"]))
     include_answer = bool(config.get("include_answer_in_metadata", True))
     use_generated_positive = bool(config.get("use_generated_positive_passage", True))
     min_instruction_negatives = max(1, int(config.get("min_instruction_negatives", 1)))
+    require_positive_validation = bool(config.get("require_positive_instruction_validation", False))
+    require_generated_positive = bool(config.get("require_generated_positive_validation", True))
+    min_hard_negatives = int(config.get("min_hard_negatives", 0))
 
     assembled: list[dict] = []
     for row in tqdm(base_records, desc="Assembling Promptriever dataset", total=len(base_records)):
@@ -84,9 +95,15 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
         generated = passages_by_id.get(row["sample_id"])
         if not generated:
             continue
+        if require_positive_validation:
+            positive_validation = positive_validation_by_id.get(row["sample_id"])
+            if not positive_validation or not positive_validation.get("is_valid", False):
+                continue
 
         instruction = str(generated.get("instruction", "")).strip()
         if not instruction:
+            continue
+        if require_generated_positive and not generated.get("generated_positive_is_valid", False):
             continue
 
         instruction_negatives = [
@@ -96,6 +113,14 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
         ]
         if len(instruction_negatives) < min_instruction_negatives:
             continue
+        hard_negative_row = hard_negatives_by_id.get(row["sample_id"], {})
+        hard_negative_passages = [
+            str(text).strip()
+            for text in hard_negative_row.get("hard_negative_passages", [])
+            if str(text).strip()
+        ]
+        if len(hard_negative_passages) < min_hard_negatives:
+            continue
 
         metadata = dict(row.get("metadata", {}))
         if include_answer:
@@ -103,6 +128,10 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
         metadata["positive_rationale"] = generated.get("positive_rationale", "")
         metadata["negative_rationales"] = generated.get("negative_rationales", [])
         metadata["original_positive_passage"] = row["positive_passage"]
+        metadata["generated_positive_score"] = generated.get("generated_positive_score")
+        metadata["hard_negative_scores"] = hard_negative_row.get("hard_negative_scores", [])
+        if require_positive_validation:
+            metadata["positive_instruction_validation_score"] = positive_validation.get("validation_score")
 
         positive_passage = row["positive_passage"]
         if use_generated_positive and str(generated.get("generated_positive_passage", "")).strip():
@@ -117,7 +146,7 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
                 "instruction": instruction,
                 "positive_passage": positive_passage,
                 "instruction_negative_passages": instruction_negatives,
-                "hard_negative_passages": row.get("negative_passages", []),
+                "hard_negative_passages": hard_negative_passages,
                 "metadata": metadata,
             }
         )
