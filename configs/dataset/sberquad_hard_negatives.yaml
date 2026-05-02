@@ -1,6 +1,8 @@
 base_records_path: data/interim/sberquad_base/sberquad_records.jsonl
 retrieval_model_config: configs/models/multilingual_e5_base.yaml
 output_path: data/interim/sberquad_base/hard_negatives.jsonl
+start_index: 0
+max_samples: null
 device: auto
 embedding_batch_size: 64
 retrieval_top_k: 50

@@ -26,6 +26,19 @@ def _require_sentence_transformers():
 def mine_hard_negatives(config_path: str | Path) -> Path:
     config = load_yaml(config_path)
     records = read_jsonl(config["base_records_path"])
+    start_index = int(config.get("start_index", 0))
+    max_samples = config.get("max_samples")
+    if start_index < 0:
+        raise ValueError("start_index must be non-negative.")
+    if start_index > len(records):
+        raise ValueError(
+            f"start_index={start_index} is larger than the dataset size ({len(records)})."
+        )
+
+    target_records = records[start_index:]
+    if max_samples is not None:
+        target_records = target_records[: int(max_samples)]
+
     model_spec = load_model_spec(config["retrieval_model_config"])
     SentenceTransformer, torch = _require_sentence_transformers()
 
@@ -47,7 +60,7 @@ def mine_hard_negatives(config_path: str | Path) -> Path:
         convert_to_numpy=True,
     )
     encoded_queries = model.encode(
-        [model_spec.format_query(row["query"], None) for row in records],
+        [model_spec.format_query(row["query"], None) for row in target_records],
         batch_size=int(config.get("embedding_batch_size", 64)),
         show_progress_bar=True,
         normalize_embeddings=bool(model_spec.normalize_embeddings),
@@ -65,11 +78,17 @@ def mine_hard_negatives(config_path: str | Path) -> Path:
     )
     query_negative_threshold = float(config.get("query_negative_threshold", 0.0))
 
+    print(
+        "Hard negative mining summary: "
+        f"dataset_size={len(records)}, start_index={start_index}, target_records={len(target_records)}, "
+        f"num_hard_negatives={num_hard_negatives}, retrieval_top_k={top_k}"
+    )
+
     output_rows: list[dict] = []
     for row, query_embedding in tqdm(
-        list(zip(records, encoded_queries, strict=False)),
+        list(zip(target_records, encoded_queries, strict=False)),
         desc="Mining hard negatives",
-        total=len(records),
+        total=len(target_records),
     ):
         similarities = np.matmul(encoded_corpus, query_embedding)
         ranked_indices = np.argsort(-similarities)[:top_k]

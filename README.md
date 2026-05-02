@@ -91,6 +91,15 @@ promptriever-rs data mine-hard-negatives \
   --config configs/dataset/sberquad_hard_negatives.yaml
 ```
 
+Чтобы искать hard negatives только для части датасета, можно использовать:
+
+```yaml
+start_index: 0
+max_samples: 5000
+```
+
+В этом случае hard negatives будут найдены только для первых `5000` примеров, начиная с `start_index`. Корпус passages при этом останется полным.
+
 ### 5. Генерация Promptriever-style passages
 
 На этом шаге создаются:
