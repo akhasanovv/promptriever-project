@@ -183,6 +183,27 @@ def _call_llm(
     )
 
 
+def _normalize_promptriever_passage_payload(parsed: dict) -> tuple[str, list[str], list[str]]:
+    generated_positive_passage = str(parsed.get("generated_positive_passage", "")).strip()
+    if not generated_positive_passage:
+        raise ValueError("The model did not return a valid generated_positive_passage.")
+
+    negatives = parsed.get("instruction_negative_passages", [])
+    if not isinstance(negatives, list):
+        raise ValueError("instruction_negative_passages must be a list.")
+
+    cleaned_negatives = [str(text).strip() for text in negatives if str(text).strip()]
+    if len(cleaned_negatives) < 1:
+        raise ValueError("The model did not return any valid instruction-negative passages.")
+
+    rationales = parsed.get("negative_rationales", [])
+    if not isinstance(rationales, list):
+        rationales = []
+    cleaned_rationales = [str(text).strip() for text in rationales if str(text).strip()]
+
+    return generated_positive_passage, cleaned_negatives, cleaned_rationales
+
+
 def _prepare_generation_run(config_path: str | Path) -> tuple[dict, list[dict], set[str], int]:
     config = load_yaml(config_path)
     input_path = Path(config["input_path"])
@@ -350,6 +371,9 @@ def generate_promptriever_passages(config_path: str | Path) -> Path:
     start_index = int(config.get("start_index", 0))
     num_instruction_negatives = max(1, int(config.get("num_instruction_negatives", 3)))
     delay = 60.0 / max(int(config.get("requests_per_minute", 25)), 1)
+    retry_delay = float(config.get("retry_delay_seconds", delay))
+    max_attempts_raw = config.get("max_generation_attempts")
+    max_attempts = None if max_attempts_raw in (None, 0) else max(1, int(max_attempts_raw))
 
     remaining_records = []
     for record in base_records[start_index:]:
@@ -372,36 +396,51 @@ def generate_promptriever_passages(config_path: str | Path) -> Path:
         start=1,
     ):
         instruction = instructions_by_id[record["sample_id"]]
-        parsed = _call_llm(
-            provider=provider,
-            api_key=api_key,
-            api_base=config["api_base"],
-            model=config["model"],
-            system_prompt=config["system_prompt"],
-            user_prompt=_build_passage_generation_user_prompt(
-                record,
-                instruction=instruction,
-                num_instruction_negatives=num_instruction_negatives,
-            ),
-            temperature=float(config.get("temperature", 0.2)),
-            max_tokens=int(config.get("max_tokens", 700)),
-        )
-        negatives = parsed.get("instruction_negative_passages", [])
-        if not isinstance(negatives, list):
-            raise ValueError("instruction_negative_passages must be a list.")
-        cleaned_negatives = [str(text).strip() for text in negatives if str(text).strip()]
-        if len(cleaned_negatives) < 1:
-            raise ValueError("The model did not return any valid instruction-negative passages.")
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                parsed = _call_llm(
+                    provider=provider,
+                    api_key=api_key,
+                    api_base=config["api_base"],
+                    model=config["model"],
+                    system_prompt=config["system_prompt"],
+                    user_prompt=_build_passage_generation_user_prompt(
+                        record,
+                        instruction=instruction,
+                        num_instruction_negatives=num_instruction_negatives,
+                    ),
+                    temperature=float(config.get("temperature", 0.2)),
+                    max_tokens=int(config.get("max_tokens", 700)),
+                )
+                generated_positive_passage, cleaned_negatives, cleaned_rationales = (
+                    _normalize_promptriever_passage_payload(parsed)
+                )
+                break
+            except KeyboardInterrupt:
+                raise
+            except Exception as exc:
+                if max_attempts is not None and attempt >= max_attempts:
+                    raise RuntimeError(
+                        "Failed to generate Promptriever passages for "
+                        f"sample_id={record['sample_id']} after {attempt} attempts."
+                    ) from exc
+                print(
+                    "Retrying passage generation for "
+                    f"sample_id={record['sample_id']} (attempt {attempt} failed: {exc})"
+                )
+                time.sleep(retry_delay)
 
         append_jsonl(
             output_path,
             {
                 "sample_id": record["sample_id"],
                 "instruction": instruction,
-                "generated_positive_passage": str(parsed["generated_positive_passage"]).strip(),
+                "generated_positive_passage": generated_positive_passage,
                 "instruction_negative_passages": cleaned_negatives,
                 "positive_rationale": str(parsed.get("positive_rationale", "")).strip(),
-                "negative_rationales": parsed.get("negative_rationales", []),
+                "negative_rationales": cleaned_rationales,
             },
         )
         if offset == 1 or offset % 50 == 0:
