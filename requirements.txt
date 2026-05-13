@@ -1,6 +1,6 @@
 PyYAML==6.0.3
 pandas==3.0.1
-datasets==4.8.3
+datasets
 groq==0.31.1
 httpx==0.28.1
 tqdm==4.67.3

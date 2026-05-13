@@ -1,6 +1,7 @@
 run_name: e5_mfollowir_eval
 model_config: configs/models/multilingual_e5_base.yaml
 model_path: outputs/train/e5_promptriever/model
+model_name: outputs/train/e5_promptriever/model
 device: auto
 tasks:
   - mFollowIR
@@ -8,3 +9,4 @@ languages:
   - rus
 output_path: outputs/eval/mfollowir_russian/results.json
 batch_size: 64
+use_mteb_cache: false

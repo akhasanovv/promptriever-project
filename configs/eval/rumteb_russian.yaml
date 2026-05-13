@@ -1,6 +1,7 @@
 run_name: e5_rumteb_eval
 model_config: configs/models/multilingual_e5_base.yaml
 model_path: outputs/train/e5_promptriever/model
+model_name: outputs/train/e5_promptriever/model
 device: auto
 tasks:
   - RuBQRetrieval
@@ -11,3 +12,4 @@ languages:
 output_path: outputs/eval/rumteb_russian/results.json
 batch_size: 64
 evaluation_steps: 10
+use_mteb_cache: false
