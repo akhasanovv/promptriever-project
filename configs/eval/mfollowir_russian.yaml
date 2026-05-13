@@ -1,6 +1,6 @@
 run_name: e5_mfollowir_eval
 model_config: configs/models/multilingual_e5_base.yaml
-model_path: intfloat/multilingual-e5-base
+model_path: outputs/train/e5_promptriever/model
 device: auto
 tasks:
   - mFollowIR
