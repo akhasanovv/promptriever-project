@@ -105,6 +105,29 @@
   }
 }
 
+\newtcolorbox{promptpassage}{
+  enhanced,
+  breakable,
+  colback=PromptBg,
+  colframe=PromptFrame,
+  boxrule=1pt,
+  arc=1.5mm,
+  left=4mm,
+  right=3mm,
+  top=3mm,
+  bottom=3mm,
+  title={Промпт для генерации инструктивных негативов},
+  coltitle=PromptTitleText,
+  fonttitle=\bfseries,
+  colbacktitle=PromptTitleBg,
+  attach boxed title to top left={xshift=3mm,yshift=-2mm},
+  boxed title style={
+    boxrule=0.6pt,
+    colframe=PromptFrame,
+    arc=1mm
+  }
+}
+
 \definecolor{PromptPosBg}{HTML}{F3FAF4}
 \definecolor{PromptPosFrame}{HTML}{7FA98A}
 \definecolor{PromptPosTitleBg}{HTML}{DDF0E1}
@@ -339,22 +362,31 @@ SberQuAD. Для каждого примера (контекст, вопрос, 
 Верни JSON с полями: \texttt{positive\_instruction}, \texttt{relevance\_reason}.
 \end{promptposbox}
 
-\begin{promptnegbox}
+\begin{promptpassage}
 \small
-Ты помогаешь строить обучающий датасет для instruction-following retrieval.
-По паре вопрос-контекст нужно придумать ОДНУ негативную инструкцию на русском языке.
-Негативная инструкция должна:
+Ты помогаешь строить instruction-following retrieval датасет по рецепту Promptriever.
+Для каждого примера нужно создать passages, которые позволяют обучать bi-encoder
+учитывать инструкцию на уровне конкретного запроса.
+
+Верни JSON со следующими полями:
 \begin{spacing}{0.8}
 \begin{enumerate}
-    \item звучать как реальная поисковая инструкция;
-    \item быть тематически близкой к вопросу;
-    \item делать данный контекст НЕподходящим;
-    \item не должна зависеть от скрытой разметки;
-    \item не должна быть бессмысленной или противоречивой.
+    \item \texttt{generated\_positive\_passage}: passage, релевантный и вопросу, и инструкции
+    \item \texttt{instruction\_negative\_passages}: список из нескольких passages, которые релевантны исходному вопросу, 
+    но НЕ удовлетворяют дополнительному условию инструкции
 \end{enumerate}
 \end{spacing}
-Верни JSON с полями: \texttt{negative\_instruction}, \texttt{violation\_reason}. 
-\end{promptnegbox}
+
+Требования:
+\begin{spacing}{0.8}
+\begin{enumerate}
+    \item passages должны быть правдоподобными и естественными;
+    \item нельзя делать negative явно абсурдным или нерелевантным теме;
+    \item negative должен отвечать базовому вопросу, но не проходить по instruction;
+    \item верни только JSON без markdown.
+\end{enumerate}
+\end{spacing}
+\end{promptpassage}
 
 В конечном итоге датасет должен содержать пары вида $(\texttt{query + instruction}, 
 \texttt{context})$, где

@@ -20,7 +20,6 @@ def assemble_instruction_dataset(config_path: str | Path) -> Path:
 
     positive_instruction_template = config.get("positive_instruction_template", "").strip()
     allowed_splits = set(config.get("splits", ["train", "validation", "test"]))
-    include_answer = bool(config.get("include_answer_in_metadata", True))
 
     assembled: list[dict] = []
     for row in tqdm(base_records, desc="Assembling instruction dataset", total=len(base_records)):
@@ -40,23 +39,14 @@ def assemble_instruction_dataset(config_path: str | Path) -> Path:
         if not positive_instruction:
             continue
 
-        metadata = dict(row.get("metadata", {}))
-        if include_answer:
-            metadata["answer"] = row.get("answer", "")
-        metadata["violation_reason"] = negative.get("violation_reason", "")
-        metadata["relevance_reason"] = positive.get("relevance_reason", "") if positive else ""
-
         assembled.append(
             {
                 "sample_id": row["sample_id"],
                 "split": row["split"],
                 "query": row["query"],
-                "answer": row.get("answer", ""),
                 "positive_passage": row["positive_passage"],
                 "positive_instruction": positive_instruction,
                 "negative_instruction": negative["negative_instruction"],
-                "negative_passages": row.get("negative_passages", []),
-                "metadata": metadata,
             }
         )
 
@@ -80,30 +70,45 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
     positive_validation_by_id = {row["sample_id"]: row for row in positive_validation_rows}
 
     allowed_splits = set(config.get("splits", ["train", "validation", "test"]))
-    include_answer = bool(config.get("include_answer_in_metadata", True))
     use_generated_positive = bool(config.get("use_generated_positive_passage", True))
-    min_instruction_negatives = max(1, int(config.get("min_instruction_negatives", 1)))
     require_positive_validation = bool(config.get("require_positive_instruction_validation", False))
     require_generated_positive = bool(config.get("require_generated_positive_validation", True))
     min_hard_negatives = int(config.get("min_hard_negatives", 0))
 
     assembled: list[dict] = []
+    stats = {
+        "total": 0,
+        "wrong_split": 0,
+        "missing_generated": 0,
+        "invalid_positive_instruction": 0,
+        "missing_instruction": 0,
+        "invalid_generated_positive": 0,
+        "not_enough_instruction_negatives": 0,
+        "not_enough_hard_negatives": 0,
+        "assembled": 0,
+    }
     for row in tqdm(base_records, desc="Assembling Promptriever dataset", total=len(base_records)):
+        stats["total"] += 1
         if row["split"] not in allowed_splits:
+            stats["wrong_split"] += 1
             continue
 
         generated = passages_by_id.get(row["sample_id"])
         if not generated:
+            stats["missing_generated"] += 1
             continue
         if require_positive_validation:
             positive_validation = positive_validation_by_id.get(row["sample_id"])
             if not positive_validation or not positive_validation.get("is_valid", False):
+                stats["invalid_positive_instruction"] += 1
                 continue
 
         instruction = str(generated.get("instruction", "")).strip()
         if not instruction:
+            stats["missing_instruction"] += 1
             continue
         if require_generated_positive and not generated.get("generated_positive_is_valid", False):
+            stats["invalid_generated_positive"] += 1
             continue
 
         instruction_negatives = [
@@ -111,7 +116,8 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
             for text in generated.get("instruction_negative_passages", [])
             if str(text).strip()
         ]
-        if len(instruction_negatives) < min_instruction_negatives:
+        if not instruction_negatives:
+            stats["not_enough_instruction_negatives"] += 1
             continue
         hard_negative_row = hard_negatives_by_id.get(row["sample_id"], {})
         hard_negative_passages = [
@@ -120,18 +126,8 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
             if str(text).strip()
         ]
         if len(hard_negative_passages) < min_hard_negatives:
+            stats["not_enough_hard_negatives"] += 1
             continue
-
-        metadata = dict(row.get("metadata", {}))
-        if include_answer:
-            metadata["answer"] = row.get("answer", "")
-        metadata["positive_rationale"] = generated.get("positive_rationale", "")
-        metadata["negative_rationales"] = generated.get("negative_rationales", [])
-        metadata["original_positive_passage"] = row["positive_passage"]
-        metadata["generated_positive_score"] = generated.get("generated_positive_score")
-        metadata["hard_negative_scores"] = hard_negative_row.get("hard_negative_scores", [])
-        if require_positive_validation:
-            metadata["positive_instruction_validation_score"] = positive_validation.get("validation_score")
 
         positive_passage = row["positive_passage"]
         if use_generated_positive and str(generated.get("generated_positive_passage", "")).strip():
@@ -142,15 +138,25 @@ def assemble_promptriever_dataset(config_path: str | Path) -> Path:
                 "sample_id": row["sample_id"],
                 "split": row["split"],
                 "query": row["query"],
-                "answer": row.get("answer", ""),
                 "instruction": instruction,
                 "positive_passage": positive_passage,
                 "instruction_negative_passages": instruction_negatives,
                 "hard_negative_passages": hard_negative_passages,
-                "metadata": metadata,
             }
         )
+        stats["assembled"] += 1
 
     output_path = Path(config["output_path"])
     write_jsonl(output_path, assembled)
+    print(
+        "Promptriever assembly summary: "
+        f"total={stats['total']}, wrong_split={stats['wrong_split']}, "
+        f"missing_generated={stats['missing_generated']}, "
+        f"invalid_positive_instruction={stats['invalid_positive_instruction']}, "
+        f"missing_instruction={stats['missing_instruction']}, "
+        f"invalid_generated_positive={stats['invalid_generated_positive']}, "
+        f"not_enough_instruction_negatives={stats['not_enough_instruction_negatives']}, "
+        f"not_enough_hard_negatives={stats['not_enough_hard_negatives']}, "
+        f"assembled={stats['assembled']}"
+    )
     return output_path

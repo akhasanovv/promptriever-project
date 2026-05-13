@@ -145,8 +145,6 @@ def validate_promptriever_passages(config_path: str | Path) -> Path:
                 "generated_positive_is_valid": bool(positive_score >= instruction_positive_threshold),
                 "instruction_negative_passages": validated_negatives,
                 "instruction_negative_scores": negative_scores,
-                "positive_rationale": row.get("positive_rationale", ""),
-                "negative_rationales": row.get("negative_rationales", []),
             }
         )
 

@@ -183,7 +183,7 @@ def _call_llm(
     )
 
 
-def _normalize_promptriever_passage_payload(parsed: dict) -> tuple[str, list[str], list[str]]:
+def _normalize_promptriever_passage_payload(parsed: dict) -> tuple[str, list[str]]:
     generated_positive_passage = str(parsed.get("generated_positive_passage", "")).strip()
     if not generated_positive_passage:
         raise ValueError("The model did not return a valid generated_positive_passage.")
@@ -196,12 +196,7 @@ def _normalize_promptriever_passage_payload(parsed: dict) -> tuple[str, list[str
     if len(cleaned_negatives) < 1:
         raise ValueError("The model did not return any valid instruction-negative passages.")
 
-    rationales = parsed.get("negative_rationales", [])
-    if not isinstance(rationales, list):
-        rationales = []
-    cleaned_rationales = [str(text).strip() for text in rationales if str(text).strip()]
-
-    return generated_positive_passage, cleaned_negatives, cleaned_rationales
+    return generated_positive_passage, cleaned_negatives
 
 
 def _prepare_generation_run(config_path: str | Path) -> tuple[dict, list[dict], set[str], int]:
@@ -414,7 +409,7 @@ def generate_promptriever_passages(config_path: str | Path) -> Path:
                     temperature=float(config.get("temperature", 0.2)),
                     max_tokens=int(config.get("max_tokens", 700)),
                 )
-                generated_positive_passage, cleaned_negatives, cleaned_rationales = (
+                generated_positive_passage, cleaned_negatives = (
                     _normalize_promptriever_passage_payload(parsed)
                 )
                 break
@@ -439,8 +434,6 @@ def generate_promptriever_passages(config_path: str | Path) -> Path:
                 "instruction": instruction,
                 "generated_positive_passage": generated_positive_passage,
                 "instruction_negative_passages": cleaned_negatives,
-                "positive_rationale": str(parsed.get("positive_rationale", "")).strip(),
-                "negative_rationales": cleaned_rationales,
             },
         )
         if offset == 1 or offset % 50 == 0:

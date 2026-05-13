@@ -32,5 +32,5 @@ max_eval_samples: 1000
 save_every_steps: 500
 use_fp16: false
 temperature: 0.01
-negatives_per_sample: 3
+negatives_per_sample: 2
 include_hard_negatives: true

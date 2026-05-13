@@ -6,7 +6,7 @@ provider: groq
 model: llama-3.1-8b-instant
 api_base: https://api.groq.com/openai/v1
 temperature: 0.2
-max_tokens: 700
+max_tokens: 1500
 requests_per_minute: 20
 num_instruction_negatives: 3
 resume: true
@@ -24,8 +24,6 @@ system_prompt: |
   - generated_positive_passage: passage, релевантный и вопросу, и инструкции
   - instruction_negative_passages: список из нескольких passages, которые релевантны исходному вопросу,
     но НЕ удовлетворяют дополнительному условию инструкции
-  - positive_rationale: краткое объяснение, почему positive passage подходит
-  - negative_rationales: список кратких объяснений, почему каждый negative нарушает инструкцию
 
   Требования:
   - passages должны быть правдоподобными и естественными;

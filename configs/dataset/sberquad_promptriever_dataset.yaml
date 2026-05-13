@@ -8,7 +8,7 @@ include_answer_in_metadata: true
 require_positive_instruction_validation: true
 require_generated_positive_validation: true
 min_instruction_negatives: 1
-min_hard_negatives: 2
+min_hard_negatives: 1
 splits:
   - train
   - validation
