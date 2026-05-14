@@ -5,8 +5,6 @@ model_name: outputs/train/e5_promptriever/model
 device: auto
 tasks:
   - RuBQRetrieval
-  - RiaNewsRetrieval
-  - MIRACLRetrieval
 languages:
   - rus
 output_path: outputs/eval/rumteb_russian/results.json

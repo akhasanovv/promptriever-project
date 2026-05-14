@@ -10,6 +10,45 @@ from promptriever_rs.models.registry import load_model_spec
 from promptriever_rs.utils.device import resolve_device
 
 
+class MtebSentenceTransformerModel:
+    def __init__(self, model, *, model_meta, normalize_embeddings: bool):
+        self.model = model
+        self.normalize_embeddings = normalize_embeddings
+        self.mteb_model_meta = model_meta
+
+    def _encode(self, sentences, *, prompt_name: str | None, **kwargs):
+        kwargs.setdefault("show_progress_bar", True)
+        kwargs["normalize_embeddings"] = self.normalize_embeddings
+        if prompt_name is not None:
+            kwargs["prompt_name"] = prompt_name
+        return self.model.encode(sentences, **kwargs)
+
+    def encode(self, sentences, **kwargs):
+        return self._encode(sentences, prompt_name=None, **kwargs)
+
+    def encode_queries(self, queries, **kwargs):
+        return self._encode(queries, prompt_name="query", **kwargs)
+
+    def encode_corpus(self, corpus, **kwargs):
+        if isinstance(corpus, dict):
+            sentences = [
+                f"{title} {text}".strip()
+                for title, text in zip(
+                    corpus.get("title", [""] * len(corpus.get("text", []))),
+                    corpus.get("text", []),
+                    strict=False,
+                )
+            ]
+        elif len(corpus) > 0 and isinstance(corpus[0], dict):
+            sentences = [
+                f"{doc.get('title', '')} {doc.get('text', '')}".strip()
+                for doc in corpus
+            ]
+        else:
+            sentences = corpus
+        return self._encode(sentences, prompt_name="document", **kwargs)
+
+
 def _require_eval_stack():
     try:
         import torch
@@ -88,6 +127,7 @@ def _build_mteb_model(
     query_prefix: str,
     document_prefix: str,
     base_model_id: str,
+    normalize_embeddings: bool,
     model_name_override: str | None = None,
 ):
     model = _load_sentence_transformer(
@@ -99,11 +139,16 @@ def _build_mteb_model(
         base_model_id=base_model_id,
     )
 
-    wrapper = mteb_module.SentenceTransformerEncoderWrapper(model)
+    native_wrapper = mteb_module.SentenceTransformerEncoderWrapper(model)
     model_name = model_name_override or str(Path(model_path).resolve())
-    wrapper.mteb_model_meta.name = model_name
-    wrapper.mteb_model_meta.revision = "local"
-    return wrapper
+    native_wrapper.mteb_model_meta.name = model_name
+    native_wrapper.mteb_model_meta.revision = "local"
+
+    return MtebSentenceTransformerModel(
+        model,
+        model_meta=native_wrapper.mteb_model_meta,
+        normalize_embeddings=normalize_embeddings,
+    )
 
 
 def evaluate_mteb(config_path: str | Path) -> Path:
@@ -120,6 +165,7 @@ def evaluate_mteb(config_path: str | Path) -> Path:
         query_prefix=model_spec.query_prefix,
         document_prefix=model_spec.document_prefix,
         base_model_id=model_spec.hf_id,
+        normalize_embeddings=bool(model_spec.normalize_embeddings),
         model_name_override=config.get("model_name"),
     )
 
