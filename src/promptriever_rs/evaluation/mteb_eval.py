@@ -35,6 +35,45 @@ def _find_lora_adapter_dir(model_path: str | Path) -> Path | None:
     return None
 
 
+def _local_weight_files_size_bytes(model_path: str | Path) -> int:
+    path = Path(model_path)
+    if not path.is_dir():
+        return 0
+    patterns = ("*.safetensors", "*.bin")
+    total = 0
+    for pattern in patterns:
+        total += sum(file.stat().st_size for file in path.rglob(pattern) if file.is_file())
+    return total
+
+
+def _format_bytes(size: int) -> str:
+    if size >= 1024**3:
+        return f"{size / 1024**3:.2f} GiB"
+    if size >= 1024**2:
+        return f"{size / 1024**2:.2f} MiB"
+    if size >= 1024:
+        return f"{size / 1024:.2f} KiB"
+    return f"{size} B"
+
+
+def _validate_local_sentence_transformer_artifact(model_path: str | Path) -> dict:
+    path = Path(model_path)
+    total_weight_size = _local_weight_files_size_bytes(path)
+    info = {
+        "local_weight_size_bytes": total_weight_size,
+        "local_weight_size": _format_bytes(total_weight_size),
+    }
+    if path.is_dir() and total_weight_size and total_weight_size < 100 * 1024**2:
+        raise ValueError(
+            f"Model path '{model_path}' does not contain a LoRA adapter_config.json, "
+            f"but its local weight files are only {_format_bytes(total_weight_size)}. "
+            "This looks like a partial PEFT/LoRA checkpoint saved as a full SentenceTransformer model. "
+            "Evaluate the actual adapter directory containing adapter_config.json, or retrain/resave with "
+            "the fixed training code so LoRA is merged into the base model before saving."
+        )
+    return info
+
+
 def _load_sentence_transformer(
     *,
     sentence_transformer,
@@ -45,12 +84,14 @@ def _load_sentence_transformer(
 ):
     adapter_dir = _find_lora_adapter_dir(model_path)
     if adapter_dir is None:
+        artifact_info = _validate_local_sentence_transformer_artifact(model_path)
         return sentence_transformer(model_path, device=device, prompts=prompts), {
             "mode": "sentence_transformer",
             "model_path": str(model_path),
             "lora_adapter_dir": None,
             "base_model": None,
             "lora_merged": False,
+            **artifact_info,
         }
 
     try:
@@ -83,12 +124,15 @@ def _load_sentence_transformer(
     else:
         model[0].auto_model = peft_model
         print("Using LoRA adapter wrapper for evaluation.")
+    adapter_weight_size = _local_weight_files_size_bytes(adapter_dir)
     return model, {
         "mode": "lora_adapter",
         "model_path": str(model_path),
         "lora_adapter_dir": str(adapter_dir),
         "base_model": str(base_name),
         "lora_merged": lora_merged,
+        "local_weight_size_bytes": adapter_weight_size,
+        "local_weight_size": _format_bytes(adapter_weight_size),
     }
 
 
@@ -105,8 +149,8 @@ def _build_mteb_model(
     model_name_override: str | None = None,
 ):
     prompts = {
-        "query": query_prefix.strip(),
-        "document": document_prefix.strip(),
+        "query": query_prefix,
+        "document": document_prefix,
     }
     model, load_info = _load_sentence_transformer(
         sentence_transformer=sentence_transformer,
@@ -150,6 +194,7 @@ def evaluate_mteb(config_path: str | Path) -> Path:
         f"mode={model.load_info['mode']}, "
         f"adapter={model.load_info['lora_adapter_dir']}, "
         f"base={model.load_info['base_model']}, "
+        f"weights={model.load_info['local_weight_size']}, "
         f"normalize_embeddings={bool(model_spec.normalize_embeddings)}"
     )
 
