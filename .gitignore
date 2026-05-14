@@ -8,3 +8,8 @@ data/interim/
 outputs/
 .env
 .DS_Store
+
+tex/*
+!tex/bibliography.bib
+!tex/main.tex
+!tex/main.pdf
