@@ -29,12 +29,22 @@ def _corpus_to_sentences(corpus):
     return corpus
 
 
-def _patch_encoder_methods(wrapper, model, *, normalize_embeddings: bool):
-    native_encode = wrapper.encode
+def _prompt_name_from_mteb_prompt_type(prompt_type) -> str | None:
+    if prompt_type is None:
+        return None
+    value = getattr(prompt_type, "value", prompt_type)
+    value = str(value).lower()
+    if "query" in value:
+        return "query"
+    if "document" in value or "corpus" in value or "passage" in value:
+        return "document"
+    return None
 
+
+def _patch_encoder_methods(wrapper, model, *, normalize_embeddings: bool):
     def encode(self, inputs, **kwargs):
-        kwargs["normalize_embeddings"] = normalize_embeddings
-        return native_encode(inputs, **kwargs)
+        prompt_name = _prompt_name_from_mteb_prompt_type(kwargs.get("prompt_type"))
+        return _encode_texts(inputs, prompt_name=prompt_name, **kwargs)
 
     def _encode_texts(sentences, *, prompt_name: str | None, **kwargs):
         for key in ("task_metadata", "hf_split", "hf_subset", "prompt_type"):
@@ -43,7 +53,7 @@ def _patch_encoder_methods(wrapper, model, *, normalize_embeddings: bool):
         kwargs["normalize_embeddings"] = normalize_embeddings
         if prompt_name is not None:
             kwargs["prompt_name"] = prompt_name
-        return model.encode(sentences, **kwargs)
+        return model.encode(_corpus_to_sentences(sentences), **kwargs)
 
     def encode_queries(self, queries, **kwargs):
         return _encode_texts(queries, prompt_name="query", **kwargs)
@@ -75,6 +85,10 @@ def _find_lora_adapter_dir(model_path: str | Path) -> Path | None:
     for candidate in candidates:
         if (candidate / "adapter_config.json").is_file():
             return candidate
+    if path.is_dir():
+        matches = sorted(path.rglob("adapter_config.json"))
+        if matches:
+            return matches[0].parent
     return None
 
 
@@ -190,6 +204,13 @@ def evaluate_mteb(config_path: str | Path) -> Path:
         base_model_id=model_spec.hf_id,
         normalize_embeddings=bool(model_spec.normalize_embeddings),
         model_name_override=config.get("model_name"),
+    )
+    print(
+        "Evaluation model load: "
+        f"mode={model.load_info['mode']}, "
+        f"adapter={model.load_info['lora_adapter_dir']}, "
+        f"base={model.load_info['base_model']}, "
+        f"normalize_embeddings={bool(model_spec.normalize_embeddings)}"
     )
 
     tasks = list(mteb.get_tasks(tasks=config["tasks"], languages=config.get("languages")))
