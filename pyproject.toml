@@ -26,14 +26,14 @@ dependencies = [
 train = [
   "torch>=2.2,<3",
   "sentence-transformers>=5.4.1,<6",
-  "transformers>=4.41,<6.0",
+  "transformers>=4.56,<5",
   "accelerate>=1.5,<2",
   "peft>=0.12,<1",
 ]
 eval = [
   "mteb>=1.38.56,<2",
   "sentence-transformers>=5.4.1,<6",
-  "transformers>=4.41,<6.0",
+  "transformers>=4.56,<5",
   "peft>=0.12,<1",
 ]
 dev = [

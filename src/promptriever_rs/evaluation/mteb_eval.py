@@ -16,6 +16,14 @@ def _require_eval_stack():
         import mteb
         from sentence_transformers import SentenceTransformer
     except ImportError as exc:
+        message = str(exc)
+        if "AutoModelForVision2Seq" in message and "transformers" in message:
+            raise ImportError(
+                "MTEB requires a newer transformers build than the one currently installed. "
+                "Install compatible evaluation dependencies with "
+                "`pip install -U 'transformers>=4.56,<5' 'mteb>=1.38.56,<2' "
+                "'sentence-transformers>=5.4.1,<6'`."
+            ) from exc
         raise ImportError(
             "Evaluation dependencies are missing. Install with `pip install -e .[eval]`."
         ) from exc
