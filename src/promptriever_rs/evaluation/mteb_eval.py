@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import MethodType
 
 from tqdm.auto import tqdm
 
@@ -10,43 +11,45 @@ from promptriever_rs.models.registry import load_model_spec
 from promptriever_rs.utils.device import resolve_device
 
 
-class MtebSentenceTransformerModel:
-    def __init__(self, model, *, model_meta, normalize_embeddings: bool):
-        self.model = model
-        self.normalize_embeddings = normalize_embeddings
-        self.mteb_model_meta = model_meta
+def _corpus_to_sentences(corpus):
+    if isinstance(corpus, dict):
+        return [
+            f"{title} {text}".strip()
+            for title, text in zip(
+                corpus.get("title", [""] * len(corpus.get("text", []))),
+                corpus.get("text", []),
+                strict=False,
+            )
+        ]
+    if len(corpus) > 0 and isinstance(corpus[0], dict):
+        return [
+            f"{doc.get('title', '')} {doc.get('text', '')}".strip()
+            for doc in corpus
+        ]
+    return corpus
 
-    def _encode(self, sentences, *, prompt_name: str | None, **kwargs):
+
+def _patch_encoder_methods(wrapper, model, *, normalize_embeddings: bool):
+    def _encode(sentences, *, prompt_name: str | None, **kwargs):
         kwargs.setdefault("show_progress_bar", True)
-        kwargs["normalize_embeddings"] = self.normalize_embeddings
+        kwargs["normalize_embeddings"] = normalize_embeddings
         if prompt_name is not None:
             kwargs["prompt_name"] = prompt_name
-        return self.model.encode(sentences, **kwargs)
+        return model.encode(sentences, **kwargs)
 
     def encode(self, sentences, **kwargs):
-        return self._encode(sentences, prompt_name=None, **kwargs)
+        return _encode(sentences, prompt_name=None, **kwargs)
 
     def encode_queries(self, queries, **kwargs):
-        return self._encode(queries, prompt_name="query", **kwargs)
+        return _encode(queries, prompt_name="query", **kwargs)
 
     def encode_corpus(self, corpus, **kwargs):
-        if isinstance(corpus, dict):
-            sentences = [
-                f"{title} {text}".strip()
-                for title, text in zip(
-                    corpus.get("title", [""] * len(corpus.get("text", []))),
-                    corpus.get("text", []),
-                    strict=False,
-                )
-            ]
-        elif len(corpus) > 0 and isinstance(corpus[0], dict):
-            sentences = [
-                f"{doc.get('title', '')} {doc.get('text', '')}".strip()
-                for doc in corpus
-            ]
-        else:
-            sentences = corpus
-        return self._encode(sentences, prompt_name="document", **kwargs)
+        return _encode(_corpus_to_sentences(corpus), prompt_name="document", **kwargs)
+
+    wrapper.encode = MethodType(encode, wrapper)
+    wrapper.encode_queries = MethodType(encode_queries, wrapper)
+    wrapper.encode_corpus = MethodType(encode_corpus, wrapper)
+    return wrapper
 
 
 def _require_eval_stack():
@@ -85,7 +88,13 @@ def _load_sentence_transformer(
     }
     adapter_dir = _find_lora_adapter_dir(model_path)
     if adapter_dir is None:
-        return sentence_transformer(model_path, device=device, prompts=prompts)
+        return sentence_transformer(model_path, device=device, prompts=prompts), {
+            "mode": "sentence_transformer",
+            "model_path": str(model_path),
+            "lora_adapter_dir": None,
+            "base_model": None,
+            "lora_merged": False,
+        }
 
     try:
         from peft import PeftConfig, PeftModel
@@ -109,13 +118,21 @@ def _load_sentence_transformer(
         raise ValueError("SentenceTransformer backbone does not expose `auto_model` for LoRA loading.")
 
     peft_model = PeftModel.from_pretrained(model[0].auto_model, str(adapter_dir), is_trainable=False)
+    lora_merged = False
     if hasattr(peft_model, "merge_and_unload"):
         model[0].auto_model = peft_model.merge_and_unload()
+        lora_merged = True
         print("Merged LoRA adapter into the base model for evaluation.")
     else:
         model[0].auto_model = peft_model
         print("Using LoRA adapter wrapper for evaluation.")
-    return model
+    return model, {
+        "mode": "lora_adapter",
+        "model_path": str(model_path),
+        "lora_adapter_dir": str(adapter_dir),
+        "base_model": str(base_name),
+        "lora_merged": lora_merged,
+    }
 
 
 def _build_mteb_model(
@@ -130,7 +147,7 @@ def _build_mteb_model(
     normalize_embeddings: bool,
     model_name_override: str | None = None,
 ):
-    model = _load_sentence_transformer(
+    model, load_info = _load_sentence_transformer(
         sentence_transformer=sentence_transformer,
         model_path=model_path,
         device=device,
@@ -144,9 +161,10 @@ def _build_mteb_model(
     native_wrapper.mteb_model_meta.name = model_name
     native_wrapper.mteb_model_meta.revision = "local"
 
-    return MtebSentenceTransformerModel(
+    native_wrapper.load_info = load_info
+    return _patch_encoder_methods(
+        native_wrapper,
         model,
-        model_meta=native_wrapper.mteb_model_meta,
         normalize_embeddings=normalize_embeddings,
     )
 
@@ -202,6 +220,8 @@ def evaluate_mteb(config_path: str | Path) -> Path:
         "model_path": config["model_path"],
         "model_name": config.get("model_name", str(Path(config["model_path"]).resolve())),
         "device": device,
+        "model_load": model.load_info,
+        "normalize_embeddings": bool(model_spec.normalize_embeddings),
         "tasks": task_results,
     }
     with output_path.open("w", encoding="utf-8") as handle:
