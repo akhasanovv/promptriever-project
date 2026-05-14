@@ -130,7 +130,7 @@ promptriever-rs generation validate-passages \
 - соответствия `instruction_negative_passages` базовому `query`
 - несоответствия `instruction_negative_passages` полному `query + instruction`
 
-можно выполнить быструю пере-разметку по уже сохраненным score-значениям без повторного запуска judge:
+можно выполнить быструю переразметку по уже сохраненным score-значениям без повторного запуска judge:
 
 ```bash
 promptriever-rs generation apply-passage-thresholds \

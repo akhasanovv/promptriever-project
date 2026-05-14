@@ -12,6 +12,7 @@ pytest>=8.0
 mteb>=1.20
 sentence-transformers>=5.4.1
 transformers<6.0,>=4.41
+peft>=0.12.0
 
 [train]
 torch>=2.2

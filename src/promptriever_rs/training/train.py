@@ -94,6 +94,31 @@ def _apply_lora(model, config: dict) -> dict:
     }
 
 
+def _merge_lora_for_inference(model) -> bool:
+    if len(model) == 0 or not hasattr(model[0], "auto_model"):
+        return False
+
+    auto_model = model[0].auto_model
+    if not hasattr(auto_model, "merge_and_unload"):
+        return False
+
+    model[0].auto_model = auto_model.merge_and_unload()
+    return True
+
+
+def _remove_lora_adapter_files(model_dir: Path) -> None:
+    adapter_filenames = {
+        "adapter_config.json",
+        "adapter_model.bin",
+        "adapter_model.safetensors",
+    }
+    for adapter_dir in (model_dir, model_dir / "0"):
+        for filename in adapter_filenames:
+            path = adapter_dir / filename
+            if path.exists():
+                path.unlink()
+
+
 def _patch_accelerate_unwrap_model_if_needed(Accelerator) -> None:
     signature = inspect.signature(Accelerator.unwrap_model)
     if "keep_torch_compile" in signature.parameters:
@@ -260,7 +285,19 @@ def fit(config_path: str | Path) -> Path:
         checkpoint_save_steps=int(config.get("save_every_steps", 500)),
         show_progress_bar=True,
     )
-    model.save(str(output_dir / "model"))
+    lora_merged = False
+    final_model_dir = output_dir / "model"
+    if use_lora:
+        if _merge_lora_for_inference(model):
+            print("Merged LoRA adapter into the base model before saving the final evaluation model.")
+            lora_summary["saved_as"] = "merged_full_model"
+            lora_merged = True
+        else:
+            print("LoRA adapter could not be merged automatically; saving the adapter-backed model.")
+            lora_summary["saved_as"] = "adapter_backed_model"
+    model.save(str(final_model_dir))
+    if lora_merged:
+        _remove_lora_adapter_files(final_model_dir)
 
     manifest = {
         "run_name": config["run_name"],
