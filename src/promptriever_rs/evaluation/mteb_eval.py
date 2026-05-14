@@ -62,17 +62,58 @@ def _require_eval_stack():
 
 
 def _load_mteb_sentence_transformer_wrapper(mteb_module):
-    wrapper = getattr(mteb_module, "SentenceTransformerEncoderWrapper", None)
-    if wrapper is not None:
-        return wrapper
+    root_candidates = [
+        "SentenceTransformerEncoderWrapper",
+        "SentenceTransformerWrapper",
+    ]
+    for name in root_candidates:
+        wrapper = getattr(mteb_module, name, None)
+        if wrapper is not None:
+            return wrapper
+
     try:
-        from mteb.models.sentence_transformer_wrapper import SentenceTransformerEncoderWrapper
+        from mteb.models import sentence_transformer_wrapper
     except ImportError as exc:
         raise ImportError(
-            "Could not import MTEB SentenceTransformerEncoderWrapper. "
+            "Could not import MTEB sentence-transformer wrappers. "
             "Please install compatible MTEB dependencies with `pip install -U -r requirements.txt`."
         ) from exc
-    return SentenceTransformerEncoderWrapper
+
+    module_candidates = [
+        "SentenceTransformerEncoderWrapper",
+        "SentenceTransformerWrapper",
+    ]
+    for name in module_candidates:
+        wrapper = getattr(sentence_transformer_wrapper, name, None)
+        if wrapper is not None:
+            return wrapper
+    return None
+
+
+def _wrap_for_mteb(mteb_module, model, *, prompts: dict[str, str]):
+    wrapper_cls = _load_mteb_sentence_transformer_wrapper(mteb_module)
+    if wrapper_cls is None:
+        print(
+            "MTEB SentenceTransformer wrapper class was not found; "
+            "passing the SentenceTransformer model directly to MTEB."
+        )
+        return model
+
+    constructor_attempts = [
+        {"model_prompts": prompts},
+        {"prompts": prompts},
+        {},
+    ]
+    last_error: TypeError | None = None
+    for kwargs in constructor_attempts:
+        try:
+            return wrapper_cls(model, **kwargs)
+        except TypeError as exc:
+            last_error = exc
+
+    raise TypeError(
+        f"Could not instantiate MTEB wrapper {wrapper_cls} with the loaded SentenceTransformer model."
+    ) from last_error
 
 
 def _find_lora_adapter_dir(model_path: str | Path) -> Path | None:
@@ -403,17 +444,12 @@ def _build_mteb_model(
         base_model_id=base_model_id,
     )
 
-    SentenceTransformerEncoderWrapper = _load_mteb_sentence_transformer_wrapper(mteb_module)
-    try:
-        native_wrapper = SentenceTransformerEncoderWrapper(model, model_prompts=prompts)
-    except TypeError:
-        native_wrapper = SentenceTransformerEncoderWrapper(model)
+    native_wrapper = _wrap_for_mteb(mteb_module, model, prompts=prompts)
     model_name = model_name_override or str(Path(model_path).resolve())
-    native_wrapper.mteb_model_meta.name = model_name
-    native_wrapper.mteb_model_meta.revision = "local"
-    native_wrapper.load_info = load_info
-    native_wrapper.normalize_embeddings = normalize_embeddings
-    return native_wrapper
+    if hasattr(native_wrapper, "mteb_model_meta"):
+        native_wrapper.mteb_model_meta.name = model_name
+        native_wrapper.mteb_model_meta.revision = "local"
+    return native_wrapper, load_info
 
 
 def evaluate_mteb(config_path: str | Path) -> Path:
@@ -422,7 +458,7 @@ def evaluate_mteb(config_path: str | Path) -> Path:
     torch, mteb, SentenceTransformer = _require_eval_stack()
     device = resolve_device(torch, config.get("device", "auto"))
 
-    model = _build_mteb_model(
+    model, model_load_info = _build_mteb_model(
         mteb_module=mteb,
         sentence_transformer=SentenceTransformer,
         model_path=config["model_path"],
@@ -435,10 +471,10 @@ def evaluate_mteb(config_path: str | Path) -> Path:
     )
     print(
         "Evaluation model load: "
-        f"mode={model.load_info['mode']}, "
-        f"adapter={model.load_info['lora_adapter_dir']}, "
-        f"base={model.load_info['base_model']}, "
-        f"weights={model.load_info['local_weight_size']}, "
+        f"mode={model_load_info['mode']}, "
+        f"adapter={model_load_info['lora_adapter_dir']}, "
+        f"base={model_load_info['base_model']}, "
+        f"weights={model_load_info['local_weight_size']}, "
         f"normalize_embeddings={bool(model_spec.normalize_embeddings)}"
     )
 
@@ -478,7 +514,7 @@ def evaluate_mteb(config_path: str | Path) -> Path:
         "model_path": config["model_path"],
         "model_name": config.get("model_name", str(Path(config["model_path"]).resolve())),
         "device": device,
-        "model_load": model.load_info,
+        "model_load": model_load_info,
         "normalize_embeddings": bool(model_spec.normalize_embeddings),
         "tasks": task_results,
     }
