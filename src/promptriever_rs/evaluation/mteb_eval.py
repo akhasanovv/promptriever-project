@@ -30,21 +30,26 @@ def _corpus_to_sentences(corpus):
 
 
 def _patch_encoder_methods(wrapper, model, *, normalize_embeddings: bool):
-    def _encode(sentences, *, prompt_name: str | None, **kwargs):
+    native_encode = wrapper.encode
+
+    def encode(self, inputs, **kwargs):
+        kwargs["normalize_embeddings"] = normalize_embeddings
+        return native_encode(inputs, **kwargs)
+
+    def _encode_texts(sentences, *, prompt_name: str | None, **kwargs):
+        for key in ("task_metadata", "hf_split", "hf_subset", "prompt_type"):
+            kwargs.pop(key, None)
         kwargs.setdefault("show_progress_bar", True)
         kwargs["normalize_embeddings"] = normalize_embeddings
         if prompt_name is not None:
             kwargs["prompt_name"] = prompt_name
         return model.encode(sentences, **kwargs)
 
-    def encode(self, sentences, **kwargs):
-        return _encode(sentences, prompt_name=None, **kwargs)
-
     def encode_queries(self, queries, **kwargs):
-        return _encode(queries, prompt_name="query", **kwargs)
+        return _encode_texts(queries, prompt_name="query", **kwargs)
 
     def encode_corpus(self, corpus, **kwargs):
-        return _encode(_corpus_to_sentences(corpus), prompt_name="document", **kwargs)
+        return _encode_texts(_corpus_to_sentences(corpus), prompt_name="document", **kwargs)
 
     wrapper.encode = MethodType(encode, wrapper)
     wrapper.encode_queries = MethodType(encode_queries, wrapper)
