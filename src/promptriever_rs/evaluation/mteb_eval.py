@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import os
 import re
+from contextlib import contextmanager
 from pathlib import Path
 
 from tqdm.auto import tqdm
@@ -11,12 +14,31 @@ from promptriever_rs.models.registry import load_model_spec
 from promptriever_rs.utils.device import resolve_device
 
 
+@contextmanager
+def _hide_torchvision_during_text_imports():
+    original_find_spec = importlib.util.find_spec
+
+    def _find_spec_without_torchvision(name, package=None):
+        if name == "torchvision" or name.startswith("torchvision."):
+            return None
+        return original_find_spec(name, package)
+
+    importlib.util.find_spec = _find_spec_without_torchvision
+    try:
+        yield
+    finally:
+        importlib.util.find_spec = original_find_spec
+
+
 def _require_eval_stack():
     try:
-        import torch
-        import mteb
-        from sentence_transformers import SentenceTransformer
-    except ImportError as exc:
+        os.environ.setdefault("USE_TF", "0")
+        os.environ.setdefault("USE_FLAX", "0")
+        with _hide_torchvision_during_text_imports():
+            import torch
+            import mteb
+            from sentence_transformers import SentenceTransformer
+    except (ImportError, RuntimeError) as exc:
         message = str(exc)
         if "AutoModelForVision2Seq" in message and "transformers" in message:
             raise ImportError(
@@ -24,6 +46,14 @@ def _require_eval_stack():
                 "Install compatible evaluation dependencies with "
                 "`pip install -U 'transformers>=4.56,<5' 'mteb>=1.38.56,<2' "
                 "'sentence-transformers>=5.4.1,<6'`."
+            ) from exc
+        if "torchvision::nms" in message or "torchvision" in message:
+            raise ImportError(
+                "The installed torchvision package is incompatible with the installed torch build. "
+                "This project only needs text embeddings for evaluation, so torchvision is intentionally "
+                "hidden during imports. Restart the Python runtime/kernel and run the evaluation again; "
+                "if the error persists, uninstall torchvision or install a torch/torchvision pair built "
+                "for the same CUDA version."
             ) from exc
         raise ImportError(
             "Evaluation dependencies are missing. Install with `pip install -e .[eval]`."
