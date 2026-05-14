@@ -9,11 +9,7 @@ from tqdm.auto import tqdm
 
 from promptriever_rs.config import ensure_dir, load_yaml
 from promptriever_rs.models.registry import load_model_spec
-from promptriever_rs.training.dataset_adapters import (
-    build_binary_instruction_pairs,
-    build_mnrl_pairs,
-    build_promptriever_examples,
-)
+from promptriever_rs.training.dataset_adapters import build_promptriever_examples
 from promptriever_rs.utils.device import resolve_device
 from promptriever_rs.utils.io import read_jsonl
 
@@ -138,34 +134,6 @@ def _split_records(records: list[dict], train_splits: set[str], eval_splits: set
     return train_rows, eval_rows
 
 
-def _build_binary_evaluator(eval_rows: list[dict], model_spec, EmbeddingSimilarityEvaluator, batch_size: int):
-    if not eval_rows:
-        return None
-
-    sentences1: list[str] = []
-    sentences2: list[str] = []
-    scores: list[float] = []
-
-    for row in tqdm(eval_rows, desc="Preparing validation pairs", total=len(eval_rows)):
-        passage = model_spec.format_document(row["positive_passage"])
-        sentences1.append(model_spec.format_query(row["query"], row["positive_instruction"]))
-        sentences2.append(passage)
-        scores.append(1.0)
-        sentences1.append(model_spec.format_query(row["query"], row["negative_instruction"]))
-        sentences2.append(passage)
-        scores.append(0.0)
-
-    return EmbeddingSimilarityEvaluator(
-        sentences1=sentences1,
-        sentences2=sentences2,
-        scores=scores,
-        batch_size=batch_size,
-        name="validation",
-        show_progress_bar=True,
-        write_csv=True,
-    )
-
-
 def fit(config_path: str | Path) -> Path:
     config = load_yaml(config_path)
     model_spec = load_model_spec(config["model_config"])
@@ -186,7 +154,7 @@ def fit(config_path: str | Path) -> Path:
     if config.get("max_eval_samples"):
         eval_rows = eval_rows[: int(config["max_eval_samples"])]
 
-    torch, SentenceTransformer, losses, DataLoader, Accelerator, EmbeddingSimilarityEvaluator = _require_training_stack()
+    torch, SentenceTransformer, losses, DataLoader, Accelerator, _ = _require_training_stack()
     _patch_accelerate_unwrap_model_if_needed(Accelerator)
     torch.manual_seed(seed)
 
@@ -201,44 +169,29 @@ def fit(config_path: str | Path) -> Path:
         print(f"LoRA disabled: training full model ({trainable}/{total} trainable parameters).")
         lora_summary.update({"trainable_params": trainable, "total_params": total})
 
-    mode = config.get("training_mode", "binary_instruction_pairs")
-    if mode == "binary_instruction_pairs":
-        train_dataset = build_binary_instruction_pairs(train_rows, model_spec)
-        eval_dataset = build_binary_instruction_pairs(eval_rows, model_spec)
-        loss = losses.CosineSimilarityLoss(model)
-        evaluator = _build_binary_evaluator(
-            eval_rows,
-            model_spec,
-            EmbeddingSimilarityEvaluator,
-            batch_size=int(config.get("eval_batch_size", config.get("batch_size", 32))),
-        )
-    elif mode == "mnrl":
-        train_dataset = build_mnrl_pairs(train_rows, model_spec)
-        eval_dataset = build_mnrl_pairs(eval_rows, model_spec)
-        loss = losses.MultipleNegativesRankingLoss(model)
-        evaluator = None
-    elif mode == "promptriever":
-        negatives_per_sample = int(config.get("negatives_per_sample", 3))
-        include_hard_negatives = bool(config.get("include_hard_negatives", True))
-        train_dataset = build_promptriever_examples(
-            train_rows,
-            model_spec,
-            negatives_per_sample=negatives_per_sample,
-            include_hard_negatives=include_hard_negatives,
-        )
-        eval_dataset = build_promptriever_examples(
-            eval_rows,
-            model_spec,
-            negatives_per_sample=negatives_per_sample,
-            include_hard_negatives=include_hard_negatives,
-        )
-        loss = losses.MultipleNegativesRankingLoss(
-            model,
-            scale=1.0 / float(config.get("temperature", 0.01)),
-        )
-        evaluator = None
-    else:
+    mode = config.get("training_mode", "promptriever")
+    if mode != "promptriever":
         raise ValueError(f"Unsupported training_mode: {mode}")
+
+    negatives_per_sample = int(config.get("negatives_per_sample", 3))
+    include_hard_negatives = bool(config.get("include_hard_negatives", True))
+    train_dataset = build_promptriever_examples(
+        train_rows,
+        model_spec,
+        negatives_per_sample=negatives_per_sample,
+        include_hard_negatives=include_hard_negatives,
+    )
+    eval_dataset = build_promptriever_examples(
+        eval_rows,
+        model_spec,
+        negatives_per_sample=negatives_per_sample,
+        include_hard_negatives=include_hard_negatives,
+    )
+    loss = losses.MultipleNegativesRankingLoss(
+        model,
+        scale=1.0 / float(config.get("temperature", 0.01)),
+    )
+    evaluator = None
 
     train_dataloader = DataLoader(
         train_dataset,

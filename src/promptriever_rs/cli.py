@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 
 from promptriever_rs.data.instruction_dataset import (
-    assemble_instruction_dataset,
     assemble_promptriever_dataset,
 )
 from promptriever_rs.data.hard_negatives import mine_hard_negatives
@@ -11,7 +10,6 @@ from promptriever_rs.data.sberquad import build_sberquad_records
 from promptriever_rs.evaluation.mfollowir import evaluate_mfollowir
 from promptriever_rs.evaluation.mteb_eval import evaluate_mteb
 from promptriever_rs.generation.groq_llama import (
-    generate_negative_instructions,
     generate_positive_instructions,
     generate_promptriever_passages,
 )
@@ -32,8 +30,6 @@ def _build_parser() -> argparse.ArgumentParser:
     data_subparsers = data_parser.add_subparsers(dest="command", required=True)
     build_sberquad = data_subparsers.add_parser("build-sberquad")
     build_sberquad.add_argument("--config", required=True)
-    assemble = data_subparsers.add_parser("assemble-training-set")
-    assemble.add_argument("--config", required=True)
     assemble_promptriever = data_subparsers.add_parser("assemble-promptriever-set")
     assemble_promptriever.add_argument("--config", required=True)
     mine_hard = data_subparsers.add_parser("mine-hard-negatives")
@@ -41,8 +37,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     generation_parser = subparsers.add_parser("generation")
     generation_subparsers = generation_parser.add_subparsers(dest="command", required=True)
-    generate = generation_subparsers.add_parser("generate-negatives")
-    generate.add_argument("--config", required=True)
     generate_pos = generation_subparsers.add_parser("generate-positives")
     generate_pos.add_argument("--config", required=True)
     generate_passages = generation_subparsers.add_parser("generate-passages")
@@ -79,20 +73,12 @@ def main() -> None:
         path = build_sberquad_records(args.config)
         print(path)
         return
-    if args.group == "data" and args.command == "assemble-training-set":
-        path = assemble_instruction_dataset(args.config)
-        print(path)
-        return
     if args.group == "data" and args.command == "assemble-promptriever-set":
         path = assemble_promptriever_dataset(args.config)
         print(path)
         return
     if args.group == "data" and args.command == "mine-hard-negatives":
         path = mine_hard_negatives(args.config)
-        print(path)
-        return
-    if args.group == "generation" and args.command == "generate-negatives":
-        path = generate_negative_instructions(args.config)
         print(path)
         return
     if args.group == "generation" and args.command == "generate-positives":

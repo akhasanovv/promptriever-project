@@ -2,69 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import MethodType
 
 from tqdm.auto import tqdm
 
 from promptriever_rs.config import ensure_dir, load_yaml
 from promptriever_rs.models.registry import load_model_spec
 from promptriever_rs.utils.device import resolve_device
-
-
-def _corpus_to_sentences(corpus):
-    if isinstance(corpus, dict):
-        return [
-            f"{title} {text}".strip()
-            for title, text in zip(
-                corpus.get("title", [""] * len(corpus.get("text", []))),
-                corpus.get("text", []),
-                strict=False,
-            )
-        ]
-    if len(corpus) > 0 and isinstance(corpus[0], dict):
-        return [
-            f"{doc.get('title', '')} {doc.get('text', '')}".strip()
-            for doc in corpus
-        ]
-    return corpus
-
-
-def _prompt_name_from_mteb_prompt_type(prompt_type) -> str | None:
-    if prompt_type is None:
-        return None
-    value = getattr(prompt_type, "value", prompt_type)
-    value = str(value).lower()
-    if "query" in value:
-        return "query"
-    if "document" in value or "corpus" in value or "passage" in value:
-        return "document"
-    return None
-
-
-def _patch_encoder_methods(wrapper, model, *, normalize_embeddings: bool):
-    def encode(self, inputs, **kwargs):
-        prompt_name = _prompt_name_from_mteb_prompt_type(kwargs.get("prompt_type"))
-        return _encode_texts(inputs, prompt_name=prompt_name, **kwargs)
-
-    def _encode_texts(sentences, *, prompt_name: str | None, **kwargs):
-        for key in ("task_metadata", "hf_split", "hf_subset", "prompt_type"):
-            kwargs.pop(key, None)
-        kwargs.setdefault("show_progress_bar", True)
-        kwargs["normalize_embeddings"] = normalize_embeddings
-        if prompt_name is not None:
-            kwargs["prompt_name"] = prompt_name
-        return model.encode(_corpus_to_sentences(sentences), **kwargs)
-
-    def encode_queries(self, queries, **kwargs):
-        return _encode_texts(queries, prompt_name="query", **kwargs)
-
-    def encode_corpus(self, corpus, **kwargs):
-        return _encode_texts(_corpus_to_sentences(corpus), prompt_name="document", **kwargs)
-
-    wrapper.encode = MethodType(encode, wrapper)
-    wrapper.encode_queries = MethodType(encode_queries, wrapper)
-    wrapper.encode_corpus = MethodType(encode_corpus, wrapper)
-    return wrapper
 
 
 def _require_eval_stack():
@@ -97,14 +40,9 @@ def _load_sentence_transformer(
     sentence_transformer,
     model_path: str,
     device: str,
-    query_prefix: str,
-    document_prefix: str,
+    prompts: dict[str, str],
     base_model_id: str,
 ):
-    prompts = {
-        "query": query_prefix.strip(),
-        "document": document_prefix.strip(),
-    }
     adapter_dir = _find_lora_adapter_dir(model_path)
     if adapter_dir is None:
         return sentence_transformer(model_path, device=device, prompts=prompts), {
@@ -166,26 +104,28 @@ def _build_mteb_model(
     normalize_embeddings: bool,
     model_name_override: str | None = None,
 ):
+    prompts = {
+        "query": query_prefix.strip(),
+        "document": document_prefix.strip(),
+    }
     model, load_info = _load_sentence_transformer(
         sentence_transformer=sentence_transformer,
         model_path=model_path,
         device=device,
-        query_prefix=query_prefix,
-        document_prefix=document_prefix,
+        prompts=prompts,
         base_model_id=base_model_id,
     )
 
-    native_wrapper = mteb_module.SentenceTransformerEncoderWrapper(model)
+    try:
+        native_wrapper = mteb_module.SentenceTransformerEncoderWrapper(model, model_prompts=prompts)
+    except TypeError:
+        native_wrapper = mteb_module.SentenceTransformerEncoderWrapper(model)
     model_name = model_name_override or str(Path(model_path).resolve())
     native_wrapper.mteb_model_meta.name = model_name
     native_wrapper.mteb_model_meta.revision = "local"
-
     native_wrapper.load_info = load_info
-    return _patch_encoder_methods(
-        native_wrapper,
-        model,
-        normalize_embeddings=normalize_embeddings,
-    )
+    native_wrapper.normalize_embeddings = normalize_embeddings
+    return native_wrapper
 
 
 def evaluate_mteb(config_path: str | Path) -> Path:
@@ -223,7 +163,10 @@ def evaluate_mteb(config_path: str | Path) -> Path:
         result = mteb.evaluate(
             model,
             [task],
-            encode_kwargs={"batch_size": int(config.get("batch_size", 64))},
+            encode_kwargs={
+                "batch_size": int(config.get("batch_size", 64)),
+                "normalize_embeddings": bool(model_spec.normalize_embeddings),
+            },
             cache=mteb.ResultCache() if use_mteb_cache else None,
             overwrite_strategy="always",
             show_progress_bar=True,

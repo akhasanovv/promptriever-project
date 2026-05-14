@@ -11,17 +11,6 @@ from promptriever_rs.config import load_yaml
 from promptriever_rs.utils.io import append_jsonl, read_jsonl
 
 
-def _build_negative_user_prompt(record: dict) -> str:
-    return (
-        "Сгенерируй одну негативную инструкцию для retrieval-модели.\n\n"
-        f"Вопрос пользователя:\n{record['query']}\n\n"
-        f"Позитивный контекст:\n{record['positive_passage']}\n\n"
-        f"Короткий ответ:\n{record.get('answer', '')}\n\n"
-        "Нужна инструкция, которая тематически близка к вопросу, "
-        "но делает этот контекст неподходящим."
-    )
-
-
 def _build_positive_user_prompt(record: dict) -> str:
     return (
         "Сгенерируй одну позитивную инструкцию для retrieval-модели.\n\n"
@@ -86,12 +75,8 @@ def _call_groq(
 
     content = chat_completion.choices[0].message.content
     parsed = json.loads(content)
-    
-    if (
-        "negative_instruction" not in parsed
-        and "positive_instruction" not in parsed
-        and "generated_positive_passage" not in parsed
-    ):
+
+    if "positive_instruction" not in parsed and "generated_positive_passage" not in parsed:
         raise ValueError(
             "Groq response does not contain a supported generation payload."
         )
@@ -133,17 +118,12 @@ def _call_openrouter(
 
     content = chat_completion.choices[0].message.content
     parsed = json.loads(content)
-    
-    if (
-        "negative_instruction" not in parsed
-        and "positive_instruction" not in parsed
-        and "generated_positive_passage" not in parsed
-    ):
+
+    if "positive_instruction" not in parsed and "generated_positive_passage" not in parsed:
         raise ValueError(
             "OpenRouter response does not contain a supported generation payload."
         )
     return parsed
-
 
 
 def _call_llm(
@@ -237,54 +217,6 @@ def _prepare_generation_run(config_path: str | Path) -> tuple[dict, list[dict], 
     return config, remaining_records, existing_ids, len(records)
 
 
-def generate_negative_instructions(config_path: str | Path) -> Path:
-    config, remaining_records, existing_ids, total_records = _prepare_generation_run(config_path)
-    output_path = Path(config["output_path"])
-    delay = 60.0 / max(int(config.get("requests_per_minute", 25)), 1)
-    start_index = int(config.get("start_index", 0))
-
-    print(
-        "Negative generation summary: "
-        f"dataset_size={total_records}, start_index={start_index}, "
-        f"already_generated={len(existing_ids)}, to_generate={len(remaining_records)}"
-    )
-
-    for offset, record in enumerate(
-        tqdm(remaining_records, desc="Generating negatives", total=len(remaining_records)),
-        start=1,
-    ):
-        if record["sample_id"] in existing_ids:
-            continue
-
-        parsed = _call_llm(
-            provider=str(config.get("provider", "groq")),
-            api_key=str(config["_runtime_api_key"]),
-            api_base=config["api_base"],
-            model=config["model"],
-            system_prompt=config["system_prompt"],
-            user_prompt=_build_negative_user_prompt(record),
-            temperature=float(config.get("temperature", 0.2)),
-            max_tokens=int(config.get("max_tokens", 220)),
-        )
-        append_jsonl(
-            output_path,
-            {
-                "sample_id": record["sample_id"],
-                "negative_instruction": parsed["negative_instruction"].strip(),
-                "violation_reason": parsed.get("violation_reason", "").strip(),
-            },
-        )
-        if offset == 1 or offset % 50 == 0:
-            original_index = start_index + offset - 1
-            print(
-                f"Saved negative instruction {offset}/{len(remaining_records)} "
-                f"(approx original index >= {original_index}, sample_id={record['sample_id']})"
-            )
-        time.sleep(delay)
-
-    return output_path
-
-
 def generate_positive_instructions(config_path: str | Path) -> Path:
     config, remaining_records, existing_ids, total_records = _prepare_generation_run(config_path)
     output_path = Path(config["output_path"])
@@ -312,7 +244,7 @@ def generate_positive_instructions(config_path: str | Path) -> Path:
             max_tokens=int(config.get("max_tokens", 220)),
         )
         if "positive_instruction" not in parsed:
-            raise ValueError("Groq response does not contain 'positive_instruction'.")
+            raise ValueError("LLM response does not contain 'positive_instruction'.")
 
         append_jsonl(
             output_path,

@@ -1,19 +1,16 @@
 # Promptriever
 
-Исследовательский код для instruction-aware dense retrieval на русскоязычных данных, вдохновленный статьей Promptriever и адаптированный для экспериментов на основе SberQuAD.
+Исследовательский код для instruction-aware dense retrieval на русскоязычных данных. Проект вдохновлен статьей Promptriever и адаптирован под эксперименты на SberQuAD.
 
-## Обзор
+Главная идея текущей версии: обучать ретривер не только на паре `query -> passage`, а на более строгой постановке `query + instruction -> passage`. Поэтому в датасете есть:
 
-Проект поддерживает два режима обучения:
+- позитивный passage, который удовлетворяет и вопросу, и инструкции;
+- instruction-negative passages, которые похожи на ответ по базовому вопросу, но нарушают инструкцию;
+- hard negative passages, найденные по корпусу SberQuAD.
 
-- `Promptriever-style` обучение, где anchor задается как `query + instruction`, а негативы представлены явными `instruction-negative passages`
-- `Pairwise baseline` обучение, где один и тот же passage сочетается с `positive_instruction` и `negative_instruction`
-
-Основной workflow в репозитории построен вокруг Promptriever-style режима.
+Именно этот вариант используется в финальном пайплайне репозитория.
 
 ## Установка
-
-Создайте виртуальное окружение и установите зависимости:
 
 ```bash
 python3 -m venv .venv
@@ -22,143 +19,140 @@ pip install -r requirements.txt
 pip install -e '.[train,eval,dev]'
 ```
 
-Если окружение уже существует, обновите зависимости:
-
-```bash
-pip install -r requirements.txt
-pip install -e '.[train,eval,dev]'
-```
-
-Проверка CLI:
+Проверить, что CLI доступен:
 
 ```bash
 promptriever-rs --help
 ```
 
-## Структура репозитория
+## Структура
 
-- `configs/` - конфигурации датасетов, моделей, обучения, оценки и пайплайнов
-- `src/promptriever_rs/` - исходный код Python-пакета
-- `data/raw/` - исходные загруженные данные
-- `data/interim/` - промежуточные JSONL- и CSV-артефакты
-- `data/processed/` - финальные train-, validation- и test-датасеты
-- `outputs/` - чекпоинты, метрики и manifests экспериментов
-- `docs/` - исследовательские заметки и проектная документация
+- `configs/dataset/` - конфиги сборки датасета и генерации LLM-артефактов
+- `configs/train/` - конфиги обучения
+- `configs/eval/` - конфиги оценки
+- `configs/pipeline/` - общий пайплайн эксперимента
+- `configs/models/` - конфиги базовых моделей
+- `src/promptriever_rs/` - код пакета
+- `data/processed/` - финальный датасет для обучения
+- `docs/` - исследовательские заметки
+
+Промежуточные данные ожидаются в `data/interim/`, а результаты обучения и оценки - в `outputs/`.
 
 ## Основной пайплайн
 
-Рекомендуемый workflow воспроизводит основную идею Promptriever настолько близко, насколько это возможно в рамках текущего кодового каркаса.
+Финальный workflow лежит в:
 
-### 1. Подготовка базовых записей SberQuAD
+```text
+configs/pipeline/e5_full_promptriever.yaml
+```
+
+Ниже те же шаги расписаны вручную.
+
+### 1. Базовые записи SberQuAD
 
 ```bash
 promptriever-rs data build-sberquad \
   --config configs/dataset/sberquad_base.yaml
 ```
 
-### 2. Генерация позитивных инструкций
+На этом шаге исходный SberQuAD приводится к единому JSONL-формату с `sample_id`, `split`, `query`, `answer` и `positive_passage`.
 
-Позитивные инструкции генерируются из `query + positive_passage`, чтобы исходный passage оставался релевантным после добавления инструкции.
+### 2. Генерация позитивных инструкций
 
 ```bash
 export GROQ_API_KEY=...
+
 promptriever-rs generation generate-positives \
   --config configs/dataset/sberquad_positive_generation.yaml
 ```
 
-### 3. Валидация позитивных инструкций
+Позитивная инструкция строится из пары `query + positive_passage`. Она должна уточнять поисковую задачу, но не ломать релевантность исходного passage.
 
-Для правильной версии датасета позитивные инструкции дополнительно фильтруются judge-моделью, которая проверяет, что `query + instruction` по-прежнему соответствует исходному passage.
+### 3. Валидация позитивных инструкций
 
 ```bash
 promptriever-rs generation validate-positives \
   --config configs/dataset/sberquad_positive_instruction_validation.yaml
 ```
 
-Если нужно только поменять порог валидности, повторно запускать judge не требуется. Достаточно пере-применить threshold к уже сохраненным `validation_score`:
+Judge-модель проверяет, что `instruction + query` всё еще соответствует исходному passage.
+
+Если нужно поменять только порог валидности, можно не запускать judge заново:
 
 ```bash
 promptriever-rs generation apply-positive-thresholds \
   --config configs/dataset/sberquad_positive_instruction_thresholds.yaml
 ```
 
-### 4. Поиск hard negatives по query
-
-Для каждого запроса извлекаются top-k кандидаты из векторной базы, после чего judge-модель отфильтровывает passages, не отвечающие на исходный `query`. В итоговый датасет сохраняются 2 таких passage.
+### 4. Поиск hard negatives
 
 ```bash
 promptriever-rs data mine-hard-negatives \
   --config configs/dataset/sberquad_hard_negatives.yaml
 ```
 
-Чтобы искать hard negatives только для части датасета, можно использовать:
+Для каждого запроса извлекаются кандидаты из корпуса, после чего judge отфильтровывает passages, которые не отвечают на исходный `query`. В итоговый датасет попадают hard negatives, полезные для обучения ретривера.
+
+Для частичного запуска можно указать в конфиге:
 
 ```yaml
 start_index: 0
 max_samples: 5000
 ```
 
-В этом случае hard negatives будут найдены только для первых `5000` примеров, начиная с `start_index`. Корпус passages при этом останется полным.
-
 ### 5. Генерация Promptriever-style passages
-
-На этом шаге создаются:
-
-- `generated_positive_passage`, релевантный и запросу, и инструкции
-- `instruction_negative_passages`, релевантные базовому запросу, но не удовлетворяющие полному `query + instruction`
 
 ```bash
 promptriever-rs generation generate-passages \
   --config configs/dataset/sberquad_promptriever_passages.yaml
 ```
 
+LLM генерирует:
+
+- `generated_positive_passage` - passage, релевантный полному `query + instruction`;
+- `instruction_negative_passages` - passages, которые отвечают на базовый `query`, но не удовлетворяют инструкции.
+
 ### 6. Валидация сгенерированных passages
-
-Judge-модель проверяет:
-
-- что `generated_positive_passage` подходит к `query + instruction`
-- что каждый `instruction_negative_passage` подходит к `query`, но не подходит к `query + instruction`
 
 ```bash
 promptriever-rs generation validate-passages \
   --config configs/dataset/sberquad_promptriever_passage_validation.yaml
 ```
 
-Если требуется изменить пороги для:
+Проверяются три условия:
 
-- `generated_positive_is_valid`
-- соответствия `instruction_negative_passages` базовому `query`
-- несоответствия `instruction_negative_passages` полному `query + instruction`
+1. `generated_positive_passage` подходит к `query + instruction`;
+2. каждый instruction-negative passage подходит к базовому `query`;
+3. тот же instruction-negative passage не подходит к полному `query + instruction`.
 
-можно выполнить быструю переразметку по уже сохраненным score-значениям без повторного запуска judge:
+Пороги можно пере-применить без повторного judge-запуска:
 
 ```bash
 promptriever-rs generation apply-passage-thresholds \
   --config configs/dataset/sberquad_promptriever_passage_thresholds.yaml
 ```
 
-### 7. Сборка обучающего датасета
+### 7. Сборка финального датасета
 
 ```bash
 promptriever-rs data assemble-promptriever-set \
   --config configs/dataset/sberquad_promptriever_dataset.yaml
 ```
 
-### 8. Обучение ретривера
+На выходе получается:
+
+```text
+data/processed/sberquad_promptriever.jsonl
+```
+
+### 8. Обучение
 
 ```bash
 promptriever-rs train fit \
   --config configs/train/e5_promptriever.yaml
 ```
 
-В этом режиме:
-
-- anchor: `query + instruction`
-- positive: `positive_passage`
-- negatives: `instruction_negative_passages` и `hard_negative_passages`
-- loss: `MultipleNegativesRankingLoss`
-
-### 9. Запуск оценки
+### 9. Оценка
 
 ```bash
 promptriever-rs eval rumteb \
@@ -168,57 +162,31 @@ promptriever-rs eval mfollowir \
   --config configs/eval/mfollowir_russian.yaml
 ```
 
-## Baseline-пайплайн
-
-Репозиторий также содержит более простой pairwise baseline для ablation-экспериментов.
-
-```bash
-export GROQ_API_KEY=...
-promptriever-rs generation generate-positives \
-  --config configs/dataset/sberquad_positive_generation.yaml
-
-promptriever-rs generation generate-negatives \
-  --config configs/dataset/sberquad_negative_generation.yaml
-
-promptriever-rs data assemble-training-set \
-  --config configs/dataset/sberquad_instruction_pairs_positive_llm.yaml
-
-promptriever-rs train fit \
-  --config configs/train/e5_instruction_pairs_positive_llm.yaml
-```
-
-Также доступна конфигурация для OpenRouter:
-
-```bash
-export OPENROUTER_API_KEY=...
-promptriever-rs generation generate-negatives \
-  --config configs/dataset/sberquad_negative_generation_openrouter.yaml
-```
-
 ## Возобновление генерации
 
-Генерацию можно продолжать с произвольного смещения с помощью следующих полей в конфиге:
+Генерацию можно продолжать с нужного места:
 
 ```yaml
 resume: true
 start_index: 12000
 ```
 
-При возобновлении генератор начинает читать входной JSONL с `start_index` и дополнительно пропускает все значения `sample_id`, которые уже присутствуют в выходном файле.
+При `resume: true` генератор читает входной JSONL с `start_index` и дополнительно пропускает `sample_id`, которые уже есть в выходном файле.
 
 ## Конфигурация обучения
 
-Train- и eval-конфиги поддерживают следующие варианты устройства:
+Train- и eval-конфиги поддерживают:
 
 - `device: auto` - сначала `cuda`, затем `mps`, иначе `cpu`
 - `device: cuda`
 - `device: mps`
 - `device: cpu`
 
-Для Apple Silicon рекомендуется `device: mps`. Для NVIDIA GPU - `device: cuda`.
-Параметр `use_fp16: true` используется только на CUDA и автоматически отключается на `mps` и `cpu`.
+Для Apple Silicon удобно использовать `device: mps`. Для NVIDIA GPU - `device: cuda`.
 
-По умолчанию включен LoRA:
+`use_fp16: true` используется только на CUDA и автоматически отключается на `mps` и `cpu`.
+
+Чтобы использовать LoRA:
 
 ```yaml
 use_lora: true
@@ -226,11 +194,14 @@ lora:
   r: 16
   alpha: 32
   dropout: 0.05
-  target_modules: [query, key, value]
+  target_modules:
+    - query
+    - key
+    - value
   bias: none
 ```
 
-Типичные гиперпараметры для варьирования между экспериментами:
+Гиперпараметры, которые обычно имеет смысл варьировать:
 
 - `lora.r`
 - `lora.alpha`
@@ -238,10 +209,9 @@ lora:
 - `batch_size`
 - `learning_rate`
 - `num_epochs`
+- `negatives_per_sample`
 
-## Формат датасета
-
-### Promptriever-style датасет
+## Формат финального датасета
 
 ```json
 {
@@ -264,25 +234,6 @@ lora:
     "context_id": "ctx-001234",
     "generated_positive_score": 3.42,
     "hard_negative_scores": [-1.27, -0.84]
-  }
-}
-```
-
-### Pairwise baseline датасет
-
-```json
-{
-  "sample_id": "train-000001",
-  "split": "train",
-  "query": "Кто написал роман ...?",
-  "answer": "Иванов",
-  "positive_passage": "Контекст из SberQuAD ...",
-  "positive_instruction": "Найди документ, который точно отвечает на вопрос.",
-  "negative_instruction": "Найди документ по той же теме, но без точного ответа на вопрос.",
-  "negative_passages": [],
-  "metadata": {
-    "source_dataset": "kuznetsoffandrey/sberquad",
-    "context_id": "ctx-001234"
   }
 }
 ```
