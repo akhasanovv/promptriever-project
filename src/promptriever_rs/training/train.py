@@ -115,6 +115,21 @@ def _remove_lora_adapter_files(model_dir: Path) -> None:
                 path.unlink()
 
 
+def _remove_stale_weight_files(model_dir: Path) -> None:
+    filenames = {
+        "model.safetensors",
+        "pytorch_model.bin",
+        "adapter_config.json",
+        "adapter_model.bin",
+        "adapter_model.safetensors",
+    }
+    for target_dir in (model_dir, model_dir / "0"):
+        for filename in filenames:
+            path = target_dir / filename
+            if path.exists():
+                path.unlink()
+
+
 def _patch_accelerate_unwrap_model_if_needed(Accelerator) -> None:
     signature = inspect.signature(Accelerator.unwrap_model)
     if "keep_torch_compile" in signature.parameters:
@@ -230,7 +245,7 @@ def fit(config_path: str | Path) -> Path:
         epochs=int(config.get("num_epochs", 1)),
         warmup_steps=warmup_steps,
         evaluation_steps=evaluation_steps,
-        output_path=str(output_dir / "model"),
+        output_path=None if use_lora else str(output_dir / "model"),
         optimizer_params={"lr": float(config.get("learning_rate", 1e-4))},
         save_best_model=False,
         use_amp=use_fp16,
@@ -245,6 +260,7 @@ def fit(config_path: str | Path) -> Path:
             print("Merged LoRA adapter into the base model before saving the final evaluation model.")
             lora_summary["saved_as"] = "merged_full_model"
             lora_merged = True
+            _remove_stale_weight_files(final_model_dir)
         else:
             print("LoRA adapter could not be merged automatically; saving the adapter-backed model.")
             lora_summary["saved_as"] = "adapter_backed_model"

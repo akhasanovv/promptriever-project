@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from tqdm.auto import tqdm
@@ -30,6 +31,20 @@ def _require_eval_stack():
     return torch, mteb, SentenceTransformer
 
 
+def _load_mteb_sentence_transformer_wrapper(mteb_module):
+    wrapper = getattr(mteb_module, "SentenceTransformerEncoderWrapper", None)
+    if wrapper is not None:
+        return wrapper
+    try:
+        from mteb.models.sentence_transformer_wrapper import SentenceTransformerEncoderWrapper
+    except ImportError as exc:
+        raise ImportError(
+            "Could not import MTEB SentenceTransformerEncoderWrapper. "
+            "Please install compatible MTEB dependencies with `pip install -U -r requirements.txt`."
+        ) from exc
+    return SentenceTransformerEncoderWrapper
+
+
 def _find_lora_adapter_dir(model_path: str | Path) -> Path | None:
     path = Path(model_path)
     candidates = [path, path / "0"]
@@ -52,6 +67,188 @@ def _local_weight_files_size_bytes(model_path: str | Path) -> int:
     for pattern in patterns:
         total += sum(file.stat().st_size for file in path.rglob(pattern) if file.is_file())
     return total
+
+
+def _model_weight_files(model_path: str | Path) -> list[Path]:
+    path = Path(model_path)
+    if not path.is_dir():
+        return []
+    candidates = [
+        path / "model.safetensors",
+        path / "pytorch_model.bin",
+        path / "0" / "model.safetensors",
+        path / "0" / "pytorch_model.bin",
+    ]
+    return [candidate for candidate in candidates if candidate.is_file()]
+
+
+def _load_weight_state_dict(weight_file: Path):
+    if weight_file.suffix == ".safetensors":
+        try:
+            from safetensors.torch import load_file
+        except ImportError as exc:
+            raise ImportError(
+                "safetensors is required to inspect/load this local model checkpoint. "
+                "Install with `pip install safetensors`."
+            ) from exc
+        return load_file(str(weight_file), device="cpu")
+
+    try:
+        import torch
+    except ImportError as exc:
+        raise ImportError("torch is required to load local PyTorch model checkpoints.") from exc
+    return torch.load(str(weight_file), map_location="cpu")
+
+
+def _peek_weight_keys(model_path: str | Path) -> list[str]:
+    keys: list[str] = []
+    for weight_file in _model_weight_files(model_path):
+        if weight_file.suffix == ".safetensors":
+            try:
+                from safetensors import safe_open
+            except ImportError as exc:
+                raise ImportError(
+                    "safetensors is required to inspect this local model checkpoint. "
+                    "Install with `pip install safetensors`."
+                ) from exc
+            with safe_open(str(weight_file), framework="pt", device="cpu") as handle:
+                keys.extend(handle.keys())
+        else:
+            state = _load_weight_state_dict(weight_file)
+            keys.extend(state.keys())
+    return keys
+
+
+def _looks_like_legacy_peft_sentence_transformer(model_path: str | Path) -> bool:
+    keys = _peek_weight_keys(model_path)
+    return any(".lora_A." in key or ".lora_B." in key or ".base_layer." in key for key in keys)
+
+
+def _load_lora_summary(model_path: str | Path) -> dict:
+    path = Path(model_path)
+    manifest_candidates = [path / "manifest.json", path.parent / "manifest.json"]
+    for manifest_path in manifest_candidates:
+        if manifest_path.is_file():
+            with manifest_path.open("r", encoding="utf-8") as handle:
+                return json.load(handle).get("lora", {})
+    return {}
+
+
+def _infer_legacy_lora_config(model_path: str | Path, lora_summary: dict) -> dict:
+    keys = _peek_weight_keys(model_path)
+    target_modules = lora_summary.get("target_modules")
+    if not target_modules:
+        found = []
+        pattern = re.compile(r"\.([^.]+)\.lora_A\.")
+        for key in keys:
+            match = pattern.search(key)
+            if match:
+                found.append(match.group(1))
+        target_modules = sorted(set(found)) or ["query", "key", "value"]
+
+    r = lora_summary.get("r")
+    if r is None:
+        for weight_file in _model_weight_files(model_path):
+            state = _load_weight_state_dict(weight_file)
+            for key, value in state.items():
+                if ".lora_A." in key and hasattr(value, "shape") and len(value.shape) >= 1:
+                    r = int(value.shape[0])
+                    break
+            if r is not None:
+                break
+    r = int(r or 16)
+    alpha = int(lora_summary.get("alpha", r * 2))
+
+    return {
+        "r": r,
+        "alpha": alpha,
+        "dropout": float(lora_summary.get("dropout", 0.0)),
+        "bias": str(lora_summary.get("bias", "none")),
+        "target_modules": target_modules,
+        "modules_to_save": lora_summary.get("modules_to_save"),
+    }
+
+
+def _load_legacy_peft_sentence_transformer(
+    *,
+    sentence_transformer,
+    model_path: str,
+    device: str,
+    prompts: dict[str, str],
+    base_model_id: str,
+):
+    try:
+        from peft import LoraConfig, TaskType, get_peft_model
+    except ImportError as exc:
+        raise ImportError(
+            "PEFT is required to load this legacy LoRA-backed SentenceTransformer checkpoint. "
+            "Install with `pip install peft`."
+        ) from exc
+
+    lora_summary = _load_lora_summary(model_path)
+    lora_config = _infer_legacy_lora_config(model_path, lora_summary)
+    modules_to_save = lora_config["modules_to_save"]
+    if isinstance(modules_to_save, list) and len(modules_to_save) == 0:
+        modules_to_save = None
+
+    print(
+        "Loading legacy PEFT-backed SentenceTransformer checkpoint from "
+        f"{model_path} with base model '{base_model_id}'."
+    )
+    model = sentence_transformer(base_model_id, device=device, prompts=prompts)
+    if len(model) == 0 or not hasattr(model[0], "auto_model"):
+        raise ValueError("SentenceTransformer backbone does not expose `auto_model` for legacy LoRA loading.")
+
+    peft_config = LoraConfig(
+        task_type=TaskType.FEATURE_EXTRACTION,
+        inference_mode=True,
+        r=lora_config["r"],
+        lora_alpha=lora_config["alpha"],
+        lora_dropout=lora_config["dropout"],
+        bias=lora_config["bias"],
+        target_modules=lora_config["target_modules"],
+        modules_to_save=modules_to_save,
+    )
+    peft_model = get_peft_model(model[0].auto_model, peft_config)
+
+    state = {}
+    for weight_file in _model_weight_files(model_path):
+        state.update(_load_weight_state_dict(weight_file))
+
+    prefixed_state = {
+        key if key.startswith("base_model.model.") else f"base_model.model.{key}": value
+        for key, value in state.items()
+    }
+    load_result = peft_model.load_state_dict(prefixed_state, strict=False)
+    bad_lora_keys = [
+        key
+        for key in getattr(load_result, "missing_keys", [])
+        if ".lora_A." in key or ".lora_B." in key
+    ]
+    if bad_lora_keys:
+        raise ValueError(
+            "Failed to load LoRA weights from legacy checkpoint. Missing LoRA keys include: "
+            f"{bad_lora_keys[:5]}"
+        )
+
+    if hasattr(peft_model, "merge_and_unload"):
+        model[0].auto_model = peft_model.merge_and_unload()
+        lora_merged = True
+    else:
+        model[0].auto_model = peft_model
+        lora_merged = False
+
+    weight_size = _local_weight_files_size_bytes(model_path)
+    return model, {
+        "mode": "legacy_peft_sentence_transformer_state",
+        "model_path": str(model_path),
+        "lora_adapter_dir": None,
+        "base_model": str(base_model_id),
+        "lora_merged": lora_merged,
+        "local_weight_size_bytes": weight_size,
+        "local_weight_size": _format_bytes(weight_size),
+        "legacy_lora_config": lora_config,
+    }
 
 
 def _format_bytes(size: int) -> str:
@@ -92,6 +289,14 @@ def _load_sentence_transformer(
 ):
     adapter_dir = _find_lora_adapter_dir(model_path)
     if adapter_dir is None:
+        if _looks_like_legacy_peft_sentence_transformer(model_path):
+            return _load_legacy_peft_sentence_transformer(
+                sentence_transformer=sentence_transformer,
+                model_path=model_path,
+                device=device,
+                prompts=prompts,
+                base_model_id=base_model_id,
+            )
         artifact_info = _validate_local_sentence_transformer_artifact(model_path)
         return sentence_transformer(model_path, device=device, prompts=prompts), {
             "mode": "sentence_transformer",
@@ -168,10 +373,11 @@ def _build_mteb_model(
         base_model_id=base_model_id,
     )
 
+    SentenceTransformerEncoderWrapper = _load_mteb_sentence_transformer_wrapper(mteb_module)
     try:
-        native_wrapper = mteb_module.SentenceTransformerEncoderWrapper(model, model_prompts=prompts)
+        native_wrapper = SentenceTransformerEncoderWrapper(model, model_prompts=prompts)
     except TypeError:
-        native_wrapper = mteb_module.SentenceTransformerEncoderWrapper(model)
+        native_wrapper = SentenceTransformerEncoderWrapper(model)
     model_name = model_name_override or str(Path(model_path).resolve())
     native_wrapper.mteb_model_meta.name = model_name
     native_wrapper.mteb_model_meta.revision = "local"
