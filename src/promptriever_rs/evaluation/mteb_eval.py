@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import importlib.util
 import os
@@ -114,6 +115,75 @@ def _wrap_for_mteb(mteb_module, model, *, prompts: dict[str, str]):
     raise TypeError(
         f"Could not instantiate MTEB wrapper {wrapper_cls} with the loaded SentenceTransformer model."
     ) from last_error
+
+
+def _call_with_supported_kwargs(func, **kwargs):
+    signature = inspect.signature(func)
+    if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()):
+        return func(**kwargs)
+    supported = {
+        key: value
+        for key, value in kwargs.items()
+        if key in signature.parameters
+    }
+    return func(**supported)
+
+
+def _serialize_mteb_result(result):
+    if hasattr(result, "to_dict"):
+        return result.to_dict()
+    if hasattr(result, "to_dataframe"):
+        return {"rows": result.to_dataframe().to_dict(orient="records")}
+    if isinstance(result, dict):
+        return {
+            str(key): _serialize_mteb_result(value)
+            for key, value in result.items()
+        }
+    if isinstance(result, (list, tuple)):
+        return [_serialize_mteb_result(item) for item in result]
+    return str(result)
+
+
+def _evaluate_task(
+    *,
+    mteb_module,
+    model,
+    task,
+    config: dict,
+    raw_output_dir: Path,
+):
+    encode_kwargs = {
+        "batch_size": int(config.get("batch_size", 64)),
+        "normalize_embeddings": bool(config.get("_normalize_embeddings", True)),
+    }
+
+    if hasattr(mteb_module, "evaluate"):
+        return mteb_module.evaluate(
+            model,
+            [task],
+            encode_kwargs=encode_kwargs,
+            cache=mteb_module.ResultCache() if bool(config.get("use_mteb_cache", False)) else None,
+            overwrite_strategy="always",
+            show_progress_bar=True,
+        )
+
+    if not hasattr(mteb_module, "MTEB"):
+        raise AttributeError(
+            "Installed MTEB exposes neither `mteb.evaluate` nor `mteb.MTEB`. "
+            "Install a supported version with `pip install -U -r requirements.txt`."
+        )
+
+    evaluation = mteb_module.MTEB(tasks=[task])
+    ensure_dir(raw_output_dir)
+    return _call_with_supported_kwargs(
+        evaluation.run,
+        model=model,
+        output_folder=str(raw_output_dir),
+        encode_kwargs=encode_kwargs,
+        overwrite_results=True,
+        raise_error=True,
+        verbosity=2,
+    )
 
 
 def _find_lora_adapter_dir(model_path: str | Path) -> Path | None:
@@ -480,33 +550,25 @@ def evaluate_mteb(config_path: str | Path) -> Path:
 
     tasks = list(mteb.get_tasks(tasks=config["tasks"], languages=config.get("languages")))
     task_results: list[dict] = []
-    use_mteb_cache = bool(config.get("use_mteb_cache", False))
+    config["_normalize_embeddings"] = bool(model_spec.normalize_embeddings)
+    raw_output_dir = Path(config["output_path"]).parent / "mteb_raw"
 
     for task in tqdm(tasks, desc="Evaluating tasks", total=len(tasks)):
         task_name = getattr(task.metadata, "name", None) or getattr(task, "name", str(task))
         print(f"Running evaluation for task: {task_name}")
-        result = mteb.evaluate(
-            model,
-            [task],
-            encode_kwargs={
-                "batch_size": int(config.get("batch_size", 64)),
-                "normalize_embeddings": bool(model_spec.normalize_embeddings),
-            },
-            cache=mteb.ResultCache() if use_mteb_cache else None,
-            overwrite_strategy="always",
-            show_progress_bar=True,
+        result = _evaluate_task(
+            mteb_module=mteb,
+            model=model,
+            task=task,
+            config=config,
+            raw_output_dir=raw_output_dir,
         )
-        if hasattr(result, "to_dict"):
-            task_results.append(result.to_dict())
-        elif hasattr(result, "to_dataframe"):
-            task_results.append(
-                {
-                    "task_name": task_name,
-                    "rows": result.to_dataframe().to_dict(orient="records"),
-                }
-            )
-        else:
-            task_results.append({"task_name": task_name, "results": str(result)})
+        task_results.append(
+            {
+                "task_name": task_name,
+                "result": _serialize_mteb_result(result),
+            }
+        )
 
     output_path = Path(config["output_path"])
     ensure_dir(output_path.parent)
