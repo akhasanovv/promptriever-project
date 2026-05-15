@@ -1,14 +1,6 @@
 # Promptriever
 
-Исследовательский код для instruction-aware dense retrieval на русскоязычных данных. Проект вдохновлен статьей Promptriever и адаптирован под эксперименты на SberQuAD.
-
-Главная идея текущей версии: обучать ретривер не только на паре `query -> passage`, а на более строгой постановке `query + instruction -> passage`. Поэтому в датасете есть:
-
-- позитивный passage, который удовлетворяет и вопросу, и инструкции;
-- instruction-negative passages, которые похожи на ответ по базовому вопросу, но нарушают инструкцию;
-- hard negative passages, найденные по корпусу SberQuAD.
-
-Именно этот вариант используется в финальном пайплайне репозитория.
+Репозиторий исследовательского проекта по статье Promptriever. 
 
 ## Установка
 
@@ -45,8 +37,6 @@ promptriever-rs --help
 ```text
 configs/pipeline/e5_full_promptriever.yaml
 ```
-
-Ниже те же шаги расписаны вручную.
 
 ### 1. Базовые записи SberQuAD
 
@@ -181,10 +171,6 @@ Train- и eval-конфиги поддерживают:
 - `device: cuda`
 - `device: mps`
 - `device: cpu`
-
-Для Apple Silicon удобно использовать `device: mps`. Для NVIDIA GPU - `device: cuda`.
-
-`use_fp16: true` используется только на CUDA и автоматически отключается на `mps` и `cpu`.
 
 Чтобы использовать LoRA:
 
