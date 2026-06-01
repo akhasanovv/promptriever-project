@@ -526,12 +526,13 @@ $1$ instruction positive текст.
     \centering
     \caption{Результаты дообучения модели multilingual-e5-base с различными параметрами LoRA}
     \label{tab:lora_results}
-    \begin{tabular}{lccccc}
+    \begin{tabular}{lccccccc}
         \toprule
-        $r$ & $\alpha$ & \textbf{Batch size} & \textbf{Trainable params\textsuperscript{1}} & \textbf{RuBQ (nDCG@10)} & \textbf{mFollowIR (pMRR)} \\
+        \textbf{Base model} & $r$ & $\alpha$ & \textbf{Dropout} & \textbf{Batch size} & \textbf{Trainable params\textsuperscript{1}} & \textbf{nDCG@10} & \textbf{pMRR} \\
         \midrule
-        16 & 32 & 16 & 0.32\% & $68.015$ & $0.61896$ \\
-        8 & 16 & 16 & 0.16\% & $61.392$ & $-0.09782$ \\
+        m-e5-base & 8 & 16 & 0.05 & 16 & 0.16\% & $61.392$ & $-0.09782$ \\
+        m-e5-base & 16 & 32 & 0.05 & 16 & 0.32\% & $68.015$ & $0.61896$ \\
+        m-e5-base & 32 & 64 & 0.05 & 16 & 0.63\% & $59.785$ & $-0.07843$ \\
         \bottomrule
     \end{tabular}
     \vspace{0.2cm}
@@ -539,9 +540,10 @@ $1$ instruction positive текст.
 
 \footnotetext[1]{Доля от всех параметров модели}
 
-После первых экспериментов с дообучением получили прирост в $+3.6$ по метрике 
+После экспериментов с дообучением получили прирост в $+3.6$ по метрике 
 pMRR относительно baseline решения, причем получили 
-сравнительно небольшую просадку в $-1.0$ по метрике nDCG@10. 
+сравнительно небольшую просадку в $-1.0$ по метрике nDCG@10 
+(при $r=16, \alpha=32$). 
 Это подтверждает гипотезу, что модель научилась различать 
 некоторые дополнительные инструкции в запросах и менять эмбеддинг в зависимости от них. 
 

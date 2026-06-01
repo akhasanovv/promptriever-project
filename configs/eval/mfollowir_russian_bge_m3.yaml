@@ -1,0 +1,12 @@
+run_name: bge_m3_mfollowir_eval
+model_config: configs/models/bge_m3.yaml
+model_path: outputs/train/bge_m3_promptriever/model
+model_name: outputs/train/bge_m3_promptriever/model
+device: auto
+tasks:
+  - mFollowIR
+languages:
+  - rus
+output_path: outputs/eval/mfollowir_russian_bge_m3/results.json
+batch_size: 64
+use_mteb_cache: false

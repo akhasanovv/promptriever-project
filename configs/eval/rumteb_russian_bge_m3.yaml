@@ -1,0 +1,13 @@
+run_name: bge_m3_rumteb_eval
+model_config: configs/models/bge_m3.yaml
+model_path: outputs/train/bge_m3_promptriever/model
+model_name: outputs/train/bge_m3_promptriever/model
+device: auto
+tasks:
+  - RuBQRetrieval
+languages:
+  - rus
+output_path: outputs/eval/rumteb_russian_bge_m3/results.json
+batch_size: 64
+evaluation_steps: 10
+use_mteb_cache: false
