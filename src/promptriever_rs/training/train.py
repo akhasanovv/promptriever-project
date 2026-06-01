@@ -130,6 +130,19 @@ def _remove_stale_weight_files(model_dir: Path) -> None:
                 path.unlink()
 
 
+def _save_lora_adapter_only(model, model_dir: Path) -> None:
+    if len(model) == 0 or not hasattr(model[0], "auto_model"):
+        raise ValueError("SentenceTransformer backbone does not expose `auto_model` for LoRA adapter saving.")
+
+    auto_model = model[0].auto_model
+    if not hasattr(auto_model, "save_pretrained"):
+        raise ValueError("Current LoRA model does not support `save_pretrained`.")
+
+    ensure_dir(model_dir)
+    _remove_stale_weight_files(model_dir)
+    auto_model.save_pretrained(str(model_dir))
+
+
 def _patch_accelerate_unwrap_model_if_needed(Accelerator) -> None:
     signature = inspect.signature(Accelerator.unwrap_model)
     if "keep_torch_compile" in signature.parameters:
@@ -239,6 +252,8 @@ def fit(config_path: str | Path) -> Path:
     else:
         print("Validation evaluator is disabled for this training mode.")
 
+    checkpoint_save_steps = int(config.get("save_every_steps", 500))
+
     model.fit(
         train_objectives=[(train_dataloader, loss)],
         evaluator=evaluator,
@@ -249,14 +264,19 @@ def fit(config_path: str | Path) -> Path:
         optimizer_params={"lr": float(config.get("learning_rate", 1e-4))},
         save_best_model=False,
         use_amp=use_fp16,
-        checkpoint_path=str(output_dir / "checkpoints"),
-        checkpoint_save_steps=int(config.get("save_every_steps", 500)),
+        checkpoint_path=str(output_dir / "checkpoints") if checkpoint_save_steps > 0 else None,
+        checkpoint_save_steps=checkpoint_save_steps,
         show_progress_bar=True,
     )
     lora_merged = False
     final_model_dir = output_dir / "model"
     if use_lora:
-        if _merge_lora_for_inference(model):
+        save_adapter_only = bool(config.get("save_lora_adapter_only", False))
+        if save_adapter_only:
+            print("Saving LoRA adapter only; evaluation will load the base model and apply the adapter.")
+            _save_lora_adapter_only(model, final_model_dir)
+            lora_summary["saved_as"] = "adapter_only"
+        elif _merge_lora_for_inference(model):
             print("Merged LoRA adapter into the base model before saving the final evaluation model.")
             lora_summary["saved_as"] = "merged_full_model"
             lora_merged = True
@@ -264,7 +284,8 @@ def fit(config_path: str | Path) -> Path:
         else:
             print("LoRA adapter could not be merged automatically; saving the adapter-backed model.")
             lora_summary["saved_as"] = "adapter_backed_model"
-    model.save(str(final_model_dir))
+    if not use_lora or lora_summary.get("saved_as") != "adapter_only":
+        model.save(str(final_model_dir))
     if lora_merged:
         _remove_lora_adapter_files(final_model_dir)
 
