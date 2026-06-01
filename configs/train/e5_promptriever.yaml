@@ -11,8 +11,8 @@ training_mode: promptriever
 device: auto
 use_lora: true
 lora:
-  r: 8
-  alpha: 16
+  r: 32
+  alpha: 64
   dropout: 0.05
   target_modules:
     - query
