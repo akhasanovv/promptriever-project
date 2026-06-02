@@ -8,5 +8,5 @@ tasks:
 languages:
   - rus
 output_path: outputs/eval/mfollowir_russian_bge_m3/results.json
-batch_size: 64
+batch_size: 8
 use_mteb_cache: false

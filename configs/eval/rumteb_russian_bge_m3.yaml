@@ -8,6 +8,6 @@ tasks:
 languages:
   - rus
 output_path: outputs/eval/rumteb_russian_bge_m3/results.json
-batch_size: 64
+batch_size: 8
 evaluation_steps: 10
 use_mteb_cache: false

@@ -8,6 +8,7 @@ from promptriever_rs.data.instruction_dataset import (
 from promptriever_rs.data.hard_negatives import mine_hard_negatives
 from promptriever_rs.data.sberquad import build_sberquad_records
 from promptriever_rs.evaluation.mfollowir import evaluate_mfollowir
+from promptriever_rs.evaluation.latency import benchmark_latency
 from promptriever_rs.evaluation.mteb_eval import evaluate_mteb
 from promptriever_rs.generation.groq_llama import (
     generate_positive_instructions,
@@ -61,6 +62,8 @@ def _build_parser() -> argparse.ArgumentParser:
     rumteb.add_argument("--config", required=True)
     mfollowir = eval_subparsers.add_parser("mfollowir")
     mfollowir.add_argument("--config", required=True)
+    latency = eval_subparsers.add_parser("latency")
+    latency.add_argument("--config", required=True)
 
     return parser
 
@@ -117,5 +120,13 @@ def main() -> None:
         path = evaluate_mfollowir(args.config)
         print(path)
         return
+    if args.group == "eval" and args.command == "latency":
+        path = benchmark_latency(args.config)
+        print(path)
+        return
 
     parser.error("Unsupported command")
+
+
+if __name__ == "__main__":
+    main()
