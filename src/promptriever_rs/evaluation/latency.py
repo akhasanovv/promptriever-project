@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from promptriever_rs.config import ensure_dir, load_yaml
+from promptriever_rs.evaluation.mteb_eval import _load_sentence_transformer
 from promptriever_rs.models.registry import load_model_spec
 from promptriever_rs.utils.device import resolve_device
 
@@ -48,7 +49,25 @@ def benchmark_latency(config_path: str | Path) -> Path:
     torch, SentenceTransformer = _require_latency_stack()
     device = resolve_device(torch, config.get("device", "auto"))
     model_path = str(config.get("model_path") or model_spec.hf_id)
-    model = SentenceTransformer(model_path, device=device)
+    if config.get("model_path"):
+        model, load_info = _load_sentence_transformer(
+            sentence_transformer=SentenceTransformer,
+            model_path=model_path,
+            device=device,
+            prompts={
+                "query": model_spec.query_prefix,
+                "document": model_spec.document_prefix,
+            },
+            base_model_id=model_spec.hf_id,
+        )
+        print(
+            "Latency model load: "
+            f"mode={load_info['mode']}, "
+            f"adapter={load_info['lora_adapter_dir']}, "
+            f"base={load_info['base_model']}"
+        )
+    else:
+        model = SentenceTransformer(model_path, device=device)
 
     text_type = str(config.get("text_type", "query"))
     if text_type == "query":
