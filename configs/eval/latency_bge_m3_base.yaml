@@ -1,0 +1,11 @@
+output_dir: outputs/eval/latency/bge_m3_base
+model_config: configs/models/bge_m3.yaml
+model_path: null
+device: auto
+text_type: query
+query: "Шедеврами какой музыки признаны сочинения Моцарта?"
+instruction: "Найдите информацию о музыкальных жанрах, в которых признаны шедевры Моцарта."
+batch_size: 1
+warmup_runs: 20
+runs: 200
+show_progress_bar: false

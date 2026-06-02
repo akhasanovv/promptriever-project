@@ -559,16 +559,16 @@ pMRR относительно baseline решения, причем получи
 
 \begin{table}[H]
     \centering
-    \caption{Latency кодирования одного запроса}
+    \caption{Latency кодирования одного запроса. Замер проводился на RTX4090.}
     \label{tab:latency_results}
-    \begin{tabular}{lcccc}
+    \begin{tabular}{lccc}
         \toprule
-        \textbf{Модель} & \textbf{Batch size} & \textbf{Mean, ms} & \textbf{Median, ms} & \textbf{p95, ms} \\
+        \textbf{Модель}& \textbf{Mean, ms} & \textbf{Median, ms} & \textbf{p95, ms} \\
         \midrule
-        multilingual-e5-base & 1 & -- & -- & -- \\
-        m-e5-base + LoRA & 1 & -- & -- & -- \\
-        bge-m3 & 1 & -- & -- & -- \\
-        bge-m3 + LoRA & 1 & -- & -- & -- \\
+        multilingual-e5-base & $7.7939$ & $7.6312$ & $8.3285$ \\
+        m-e5-base + LoRA ($r=16, \alpha=32$) & $7.7644$ & $7.7107$ & $8.1165$ \\
+        bge-m3 & -- & -- & -- \\
+        bge-m3 + LoRA ($r=16, \alpha=32$) & -- & -- & -- \\
         \bottomrule
     \end{tabular}
     \vspace{0.2cm}
